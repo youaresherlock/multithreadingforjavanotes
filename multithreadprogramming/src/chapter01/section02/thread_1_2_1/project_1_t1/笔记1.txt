@@ -1,0 +1,413 @@
+	本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，书名是<<Java多线程编程核心
+技术>>，作者是大佬企业高级项目经理高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他
+的博客奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不细分析了，建议以前接触过
+其他语言多线程或者没有系统学习过多线程的开发者来看。另外需要注意的是，博客中给出的一些英文
+文档我就不翻译了，要不太浪费时间了，这个是我想提高自己的英文阅读水平和文档查看能力，想要积攒
+内功的人可以用有谷歌翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+
+
+什么是进程和线程?
+	几乎每种操作系统都支持进程的概念 ―― 进程就是在某种程度上相互隔离的、独立运行的程序。
+线程化是允许多个活动共存于一个进程中的工具。大多数现代的操作系统都支持线程，而且线程的概念
+以各种形式已存在了好多年。Java 是第一个在语言本身中显式地包含线程的主流编程语言，它没有把线程化
+看作是底层操作系统的工具。
+	有时候，线程也称作轻量级进程。就象进程一样，线程在程序中是独立的、并发的执行路径，每个线程有它自己
+的堆栈、自己的程序计数器和自己的局部变量。但是，与分隔的进程相比，进程中的线程之间的隔离程度要小。
+它们共享内存、文件句柄和其它每个进程应有的状态。
+	进程可以支持多个线程，它们看似同时执行，但互相之间并不同步。一个进程中的多个线程共享相同的内存地址
+空间，这就意味着它们可以访问相同的变量和对象，而且它们从同一堆中分配对象。尽管这让线程之间共享信息
+变得更容易，但您必须小心，确保它们不会妨碍同一进程里的其它线程。
+	Java 线程工具和 API 看似简单。但是，编写有效使用线程的复杂程序并不十分容易。因为有多个线程共存在相
+同的内存空间中并共享相同的变量，所以您必须小心，确保您的线程不会互相干扰。
+	进程是受操作系统管理的基本运行单元，打开windows任务管理器就可以看到进程列表
+线程是进程中独立运行的子任务
+
+
+线程的好处?
+	在 Java 程序中使用线程有许多原因。如果您使用 Swing、servlet、RMI 或 Enterprise JavaBeans（EJB）技术
+，您也许没有意识到您已经在使用线程了。
+使用线程的一些原因是它们可以帮助：
+	使 UI 响应更快
+	利用多处理器系统
+	简化建模
+	执行异步或后台处理
+	我们都知道dos系统是单任务和单用户操纵系统，任务排队执行，因此系统执行效率大大降低(多级流水线
+技术没有充分利用) 而单核或者多核微机就可以使用多线程或者多进程来加快任务的执行，尤其是重复性
+的任务。
+
+
+Java中一个程序中有哪些线程:
+每个 Java 程序都使用线程
+每个 Java 程序都至少有一个线程 ― 主线程(注意这个是非守护线程，后面会提到)。当一个 Java 程序启动时，JVM 
+会创建主线程，并在该线程中调用程序的 main() 方法。
+JVM 还创建了其它线程，您通常都看不到它们 ― 例如，与垃圾收集、对象终止和其它 JVM 内务处理任务相关的线程。
+
+
+实现多线程编程的方式主要有两种:
+1.继承Thread类 如果使用继承Thread类来实现，那么最大的局限就是不支持多继承
+2.实现Runnable接口，重写run方法
+这两个方法没有本质的区别
+
+
+public class Thread
+extends Object
+implements Runnable
+A thread is a thread of execution in a program. The Java Virtual Machine allows an application
+ to have multiple threads of execution running concurrently.
+Every thread has a priority. Threads with higher priority are executed in preference to thread
+s with lower priority. Each thread may or may not also be marked as a daemon. When code runnin
+g in some thread creates a new Thread object, the new thread has its priority initially set 
+equal to the priority of the creating thread, and is a daemon thread if and only if the creati
+ng thread is a daemon.
+
+When a Java Virtual Machine starts up, there is usually a single non-daemon thread (which typically
+ calls the method named main of some designated class). The Java Virtual Machine continues to execute
+  threads until either of the following occurs:
+
+The exit method of class Runtime has been called and the security manager has permitted the exit 
+operation to take place.
+All threads that are not daemon threads have died, either by returning from the call to the run 
+method or by throwing an exception that propagates beyond the run method.
+There are two ways to create a new thread of execution. One is to declare a class to be a subclass 
+of Thread. This subclass should override the run method of class Thread. An instance of the 
+subclass can then be allocated and started.
+
+
+继承Thread类例子: 
+
+线程类MyThread.java
+package chapter01.section02.thread_1_2_1.project_1_t1;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		super.run();
+		System.out.println("MyThread");
+	}
+}
+
+
+//测试类 Run.java
+package chapter01.section02.thread_1_2_1.project_1_t1;
+
+public class Run {
+	public static void main(String args[]) {
+		MyThread mythread = new MyThread();
+		mythread.start();
+		System.out.println("运行结束!");
+	}
+}
+
+/*
+result:
+可能是下面两种:
+运行结束!
+MyThread
+
+运行结束!
+MyThread
+*/
+
+我们看到测试结果并不相同，其实这也说明了mythread.start();线程只是进入就绪队列，时间片还没有分到，
+可能是主线程得到了时间片.另外，主线程是用户线程，运行结束之后mythread线程没有停止，说明也是用户线程。
+后面会详细讲到
+
+
+
+线程的调用的随机性，这里大家可以自己看看时间片轮转等一些调度算法(操作系统的一些知识)
+线程类MyThread.java
+package chapter01.section02.thread_1_2_1.project_2_randomThread;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		try {
+			for(int i = 0; i < 100; i++) {
+				int time = (int) (Math.random() * 1000);
+				Thread.sleep(time);
+				System.out.println("run=" + Thread.currentThread().getName());
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+测试类Test.java
+package chapter01.section02.thread_1_2_1.project_2_randomThread;
+
+public class Test {
+
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.setName("myThread");
+			thread.start();
+			
+			for(int i = 0; i < 100; i++) {
+				int time = (int) (Math.random() * 1000);
+				Thread.sleep(time);
+				System.out.println("main=" + Thread.currentThread().getName());
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+/*
+result:
+main=main
+run=myThread
+main=main
+main=main
+run=myThread
+run=myThread
+main=main
+main=main
+run=myThread
+main=main
+run=myThread
+main=main
+main=main
+run=myThread
+run=myThread
+main=main
+run=myThread
+main=main
+run=myThread
+main=main
+main=main
+run=myThread
+run=myThread
+main=main
+run=myThread
+run=myThread
+main=main
+run=myThread
+run=myThread
+main=main
+main=main
+main=main
+main=main
+run=myThread
+run=myThread
+ */
+
+
+thread.run()和thread.start()区别:
+thread.start()方法通知"线程调度器"此线程已经准备就绪，
+等待调用线程对象的run()方法，系统会自动分配时间片给这个线程。
+如果调用thread.run()就不是异步执行，而是同步了，此线程对象并不
+交给"线程调度器"来进行处理，而是由main主线程来调用run()方法，也就是
+必须等run()方法中的代码执行完成之后才可以执行后面的代码
+
+
+我们接着测试执行start()方法的顺序不代表线程启动的顺序。
+package chapter01.section02.thread_1_2_1.project_3_z;
+
+public class MyThread extends Thread {
+	private int i;
+	public MyThread(int i) {
+		super();
+		this.i = i;
+	}
+
+	@Override
+	public void run() {
+		super.run();
+		System.out.println(i);
+	}
+}
+
+
+package chapter01.section02.thread_1_2_1.project_3_z;
+
+public class Test {
+
+	public static void main(String[] args) {
+		// TODO Auto-generated method stub
+		MyThread t11 = new MyThread(1);
+		MyThread t12 = new MyThread(2);
+		MyThread t13 = new MyThread(3);
+		MyThread t14 = new MyThread(4);
+		MyThread t15 = new MyThread(5);
+		MyThread t16 = new MyThread(6);
+		MyThread t17 = new MyThread(7);
+		MyThread t18 = new MyThread(8);
+		MyThread t19 = new MyThread(9);
+		MyThread t110 = new MyThread(10);
+		MyThread t111 = new MyThread(11);
+		MyThread t112 = new MyThread(12);
+		MyThread t113 = new MyThread(13);
+		
+		t11.start();
+		t12.start();
+		t13.start();
+		t14.start();
+		t15.start();
+		t16.start();
+		t17.start();
+		t18.start();
+		t19.start();
+		t110.start();
+		t111.start();
+		t112.start();
+		t113.start();
+	}
+}
+
+
+/*
+ result:
+1
+5
+4
+7
+8
+3
+2
+10
+9
+6
+11
+12
+13
+可以看到线程启动顺序与start执行顺序无关 
+ */
+
+
+实现Runnable接口
+如果要创建的线程类已经有一个父类了，那么就不能再继承自Thread类了，因为Java不支持多继承，
+所以就需要实现Runnable接口来应对这样的情况
+package chapter01.section02.thread_1_2_2.project_1_t2;
+
+public class MyRunnable implements Runnable {
+
+	@Override
+	public void run() {
+		// TODO Auto-generated method stub
+		System.out.println("运行中!");
+	}
+
+}
+
+
+package chapter01.section02.thread_1_2_2.project_1_t2;
+
+public class Run {
+	public static void main(String args[]) {
+		Runnable runnable = new MyRunnable();
+		Thread thread = new Thread(runnable);
+		thread.start();
+		System.out.println("运行结束！");
+	}
+}
+
+/*
+result:
+运行结束！
+运行中!
+
+ */
+
+Thread.java类实现了Runnable接口，意味着构造函数Thread(Runnable target)不光可以
+传入Runnable接口的对象，还可以传入一个Thread类的对象，这样做完全可以将一个Thread对象
+的run()方法交由其他的线程调用。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
