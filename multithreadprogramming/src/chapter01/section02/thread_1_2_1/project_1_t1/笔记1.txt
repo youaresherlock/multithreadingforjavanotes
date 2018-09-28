@@ -1,26 +1,35 @@
-	本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，书名是<<Java多线程编程核心
-技术>>，作者是大佬企业高级项目经理高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他
-的博客奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不细分析了，建议以前接触过
-其他语言多线程或者没有系统学习过多线程的开发者来看。另外需要注意的是，博客中给出的一些英文
-文档我就不翻译了，要不太浪费时间了，这个是我想提高自己的英文阅读水平和文档查看能力，想要积攒
-内功的人可以用有谷歌翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+	本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就不
+翻译了，要不太浪费时间了，这个是我想提高自己的英文阅读水平和
+文档查看能力，想要积攒内功的人可以用有谷歌翻译自己看文档细读。
+(中文文档建议只参考，毕竟你懂得...)
+详细代码见:https://github.com/youaresherlock/multithreadingforjavanotes
 
 
 什么是进程和线程?
-	几乎每种操作系统都支持进程的概念 ―― 进程就是在某种程度上相互隔离的、独立运行的程序。
-线程化是允许多个活动共存于一个进程中的工具。大多数现代的操作系统都支持线程，而且线程的概念
-以各种形式已存在了好多年。Java 是第一个在语言本身中显式地包含线程的主流编程语言，它没有把线程化
-看作是底层操作系统的工具。
-	有时候，线程也称作轻量级进程。就象进程一样，线程在程序中是独立的、并发的执行路径，每个线程有它自己
-的堆栈、自己的程序计数器和自己的局部变量。但是，与分隔的进程相比，进程中的线程之间的隔离程度要小。
+	几乎每种操作系统都支持进程的概念 ―― 进程就是在某种程度上相互隔离的、
+独立运行的程序。
+线程化是允许多个活动共存于一个进程中的工具。大多数现代的操作系统都支持线程
+，而且线程的概念
+以各种形式已存在了好多年。Java 是第一个在语言本身中显式地包含线程的主流编程
+语言，它没有把线程化看作是底层操作系统的工具。
+	有时候，线程也称作轻量级进程。就象进程一样，线程在程序中是独立的、并发的
+执行路径，每个线程有它自己的堆栈、自己的程序计数器和自己的局部变量。但是，与
+分隔的进程相比，进程中的线程之间的隔离程度要小。
 它们共享内存、文件句柄和其它每个进程应有的状态。
-	进程可以支持多个线程，它们看似同时执行，但互相之间并不同步。一个进程中的多个线程共享相同的内存地址
-空间，这就意味着它们可以访问相同的变量和对象，而且它们从同一堆中分配对象。尽管这让线程之间共享信息
-变得更容易，但您必须小心，确保它们不会妨碍同一进程里的其它线程。
-	Java 线程工具和 API 看似简单。但是，编写有效使用线程的复杂程序并不十分容易。因为有多个线程共存在相
-同的内存空间中并共享相同的变量，所以您必须小心，确保您的线程不会互相干扰。
-	进程是受操作系统管理的基本运行单元，打开windows任务管理器就可以看到进程列表
-线程是进程中独立运行的子任务
+	进程可以支持多个线程，它们看似同时执行，但互相之间并不同步。一个进程中的
+多个线程共享相同的内存地址空间，这就意味着它们可以访问相同的变量和对象，而且
+它们从同一堆中分配对象。尽管这让线程之间共享信息变得更容易，但您必须小心，确
+保它们不会妨碍同一进程里的其它线程。
+	Java 线程工具和 API 看似简单。但是，编写有效使用线程的复杂程序并不十分
+容易。因为有多个线程共存在相同的内存空间中并共享相同的变量，所以您必须小心，
+确保您的线程不会互相干扰。
+	进程是受操作系统管理的基本运行单元，打开windows任务管理器就可以看到
+进程列表线程是进程中独立运行的子任务
 
 
 线程的好处?
@@ -283,6 +292,23 @@ public class Test {
 
 
 实现Runnable接口
+
+The Runnable interface should be implemented by any class whose instances 
+are intended to be executed by a thread. The class must define a method of 
+no arguments called run.
+This interface is designed to provide a common protocol for objects that 
+wish to execute code while they are active. For example, Runnable is 
+implemented by class Thread. Being active simply means that a thread has 
+been started and has not yet been stopped.
+
+In addition, Runnable provides the means for a class to be active while 
+not subclassing Thread. A class that implements Runnable can run without 
+subclassing Thread by instantiating a Thread instance and passing itself 
+in as the target. In most cases, the Runnable interface should be used if 
+you are only planning to override the run() method and no other Thread methods. 
+This is important because classes should not be subclassed unless the programmer 
+intends on modifying or enhancing the fundamental behavior of the class.
+
 如果要创建的线程类已经有一个父类了，那么就不能再继承自Thread类了，因为Java不支持多继承，
 所以就需要实现Runnable接口来应对这样的情况
 package chapter01.section02.thread_1_2_2.project_1_t2;

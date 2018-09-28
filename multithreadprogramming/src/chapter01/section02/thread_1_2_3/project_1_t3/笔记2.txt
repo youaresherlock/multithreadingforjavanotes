@@ -1,0 +1,466 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就不
+翻译了，要不太浪费时间了，这个是我想提高自己的英文阅读水平和
+文档查看能力，想要积攒内功的人可以用有谷歌翻译自己看文档细读。
+(中文文档建议只参考，毕竟你懂得...)
+详细代码见:https://github.com/youaresherlock/multithreadingforjavanotes
+
+实例变量与线程安全
+	自定义线程类中的实例变量针对其他线程可以有共享和不共享之分，这在多个
+线程之间交互时是很重要的一个技术点。
+
+数据不共享情况:
+package chapter01.section02.thread_1_2_3.project_1_t3;
+
+public class MyThread extends Thread {
+	private int count = 5;
+	public MyThread(String name) {
+		super();
+		this.setName(name); //设置线程名称
+	}
+	
+	@Override
+	public void run() {
+		super.run();
+		while(count > 0) {
+			count--;
+			System.out.println("由 " + this.currentThread().getName() 
+					+ " 计算, count=" + count);
+		}
+	}
+}
+
+package chapter01.section02.thread_1_2_3.project_1_t3;
+
+public class Run {
+	public static void main(String args[]) {
+		MyThread a = new MyThread("A");
+		MyThread b = new MyThread("B");
+		MyThread c = new MyThread("C");
+		
+		a.start();
+		b.start();
+		c.start();
+	}
+}
+
+/*
+result:
+由 C 计算, count=4
+由 A 计算, count=4
+由 A 计算, count=3
+由 A 计算, count=2
+由 A 计算, count=1
+由 A 计算, count=0
+由 B 计算, count=4
+由 C 计算, count=3
+由 B 计算, count=3
+由 B 计算, count=2
+由 C 计算, count=2
+由 B 计算, count=1
+由 C 计算, count=1
+由 B 计算, count=0
+由 C 计算, count=0
+ */
+可以看到一共创建了三个线程，每个线程都有各自的count变量，自己减少自己的
+count变量的值，这样的情况就是变量不共享，这里不存在多个线程访问同一个实例
+变量的情况
+
+
+
+共享数据的情况
+共享数据的情况就是多个线程可以访问同一个变量
+package chapter01.section02.thread_1_2_3.project_2_t4;
+
+public class MyThread extends Thread {
+	private int count = 5;
+	
+	@Override
+	public void run() {
+		super.run();
+			count--;
+			System.out.println("由 " + this.currentThread().getName() 
+					+ " 计算, count=" + count);
+	}
+}
+
+
+package chapter01.section02.thread_1_2_3.project_2_t4;
+
+public class Run {
+	public static void main(String args[]) {
+		MyThread myThread = new MyThread();
+		Thread a = new Thread(myThread, "A");
+		Thread b = new Thread(myThread, "B");
+		Thread c = new Thread(myThread, "C");
+		Thread d = new Thread(myThread, "D");
+		Thread e = new Thread(myThread, "E");
+		
+		
+		a.start();
+		b.start();
+		c.start();
+		d.start();
+		e.start();
+	}
+}
+
+/*
+result:
+由 A 计算, count=3
+由 B 计算, count=3
+由 D 计算, count=2
+由 C 计算, count=2
+由 E 计算, count=1
+*/
+可以看到AB以及DC打印出来的值相同，说明AB、DC同时对count进行处理，产生了"非线程
+安全"问题。我们想要的是5 4 3 2 1这样递减的形式
+
+非线程安全: 
+	是指多个线程对同一个对象中的同一个实例变量进行操作时会出现值被更改、值不同步
+的情况，进而影响程序的执行流程
+
+这里就要谈到一点Java内存模型的东西了
+主内存和工作内存
+Java内存模型规定了所有变量都存储在主内存中（此处主内存与物理计算机的主内存名字一样
+，可以类比，但此处仅是虚拟机内存的一部分），这里的变量包括实例字段，静态字段和构成
+数组对象的元素，但不包括局部变量和方法参数，因为后者是线程私用的。每个线程还有自己
+的工作内存（可与处理器的高速缓存类比），线程的工作内存中保存了被该线程使用到的变量
+的主内存副本拷贝，线程对变量的所有操作（读写等）都必须在工作内存中，不能直接读写主
+内存中的变量。不同的线程之间也不能直接访问对方工作内存中的变量，线程间的变量值的传递
+必须通过主内存来完成。 
+
+java内存模型是围绕着如何处理原子性，可见性，有序性来建立的。
+原子性：
+	原子性指多个操作的组合要么一起执行完，要么全部不执行，这个很好理解，一个线程
+在执行一组操作的中途，不能被另一个线程插一脚，不然会造成数据错误，最经典就是 a++;操
+作，++ 操作符不是原子的，所以需要使用同步工具保证其原子性。
+可见性：
+	根据java内存模型的结构，各个线程都会从主内存备份一个变量的工作内存放在自己的
+工作内存作为缓存，可以提高效率，这样就造成了可见性问题，即一个线程修改了一个数据，如
+果一没有立即同步回主内存，二没有让其他使用这个数据的线程及时从主内存同步，则其他线程
+的数据是错误的。
+有序性：
+	编译器和处理器为了获得更高的效率，会对指令进行重排序，实际生成的字节码指令顺
+序或者处理器指令顺序并非是程序源代码中的顺序，这个在单线程的情况下问题不大，因为编译
+器和处理器会保证结果正确，但是多线程的环境下，因为线程之间很多时候需要协调，如果指令
+进行重排，会影响协调结果错乱。
+
+在某些JVM中，i--的操作要分成如下3步:
+1) 取得原有i值
+2) 计算 i - 1
+3) 对i进行赋值
+因此这是出现数据错误的原因，如果有多个线程同时访问，那么一定会出现非线程安全问题。
+
+
+我们使多个线程之间进行同步，按照顺序排队的方式进行减1操作:
+package chapter01.section02.thread_1_2_3.project_2_t4;
+
+public class MyThread extends Thread {
+	private int count = 5;
+	
+//	@Override
+//	public void run() {
+//		super.run();
+//			count--;
+//			System.out.println("由 " + this.currentThread().getName() 
+//					+ " 计算, count=" + count);
+//	}
+	
+	@Override
+	synchronized public void run() {
+		super.run();
+			count--;
+			System.out.println("由 " + this.currentThread().getName() 
+					+ " 计算, count=" + count);
+	}
+}
+
+
+package chapter01.section02.thread_1_2_3.project_2_t4;
+
+public class Run {
+	public static void main(String args[]) {
+		MyThread myThread = new MyThread();
+		Thread a = new Thread(myThread, "A");
+		Thread b = new Thread(myThread, "B");
+		Thread c = new Thread(myThread, "C");
+		Thread d = new Thread(myThread, "D");
+		Thread e = new Thread(myThread, "E");
+		
+		
+		a.start();
+		b.start();
+		c.start();
+		d.start();
+		e.start();
+	}
+}
+
+/*
+添加同步操作之后的结果:
+由 A 计算, count=4
+由 E 计算, count=3
+由 D 计算, count=2
+由 C 计算, count=1
+由 B 计算, count=0
+*/
+
+通过在run方法前加入sychronized关键字，使多个线程在执行run方法时，以排队的方式进行处理
+。当一个线程调用run前，先判断run方法有没有被上锁，如果上锁，说明有其他线程正在调用run方
+法，必须等其他线程对run方法调用结束后才可以执行run方法。synchronized可以在任意对象及方
+法上加锁，而加锁的这段代码成为"互斥区"或"临界区"
+
+
+举一个"非线程安全的环境"案例，并且解决它
+ALogin.java
+package chapter01.section02.thread_1_2_3.project_2_t4.project_3_t4threadsafe;
+
+public class ALogin extends Thread {
+
+	@Override
+	public void run() {
+		LoginServlet.doPost("a", "aa");
+	}
+}
+
+
+BLogin.java
+package chapter01.section02.thread_1_2_3.project_2_t4.project_3_t4threadsafe;
+
+public class BLogin extends Thread {
+	
+	@Override
+	public void run() {
+		LoginServlet.doPost("b", "bb");
+	}
+}
+
+
+LoginServlet.java
+package chapter01.section02.thread_1_2_3.project_2_t4.project_3_t4threadsafe;
+
+public class LoginServlet {
+	
+	private static String usernameRef;
+	private static String passwordRef;
+	
+	public static void doPost(String username, String password) {
+		//synchronized public static void doPost(String username, String password){
+		try {
+			usernameRef = username;
+			if(username.equals("a")) {
+				Thread.sleep(5000);
+			}
+			passwordRef = password;
+			
+			System.out.println("username=" + usernameRef + " password="
+					+ passwordRef);
+			
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+//测试类
+Run.java
+package chapter01.section02.thread_1_2_3.project_2_t4.project_3_t4threadsafe;
+
+public class Run {
+
+	public static void main(String[] args) {
+		ALogin a = new ALogin();
+		a.start();
+		BLogin b = new BLogin();
+		b.start();
+		
+	}	
+}
+
+/*
+result:
+username=b password=bb
+username=b password=aa
+
+我们可以看到出现了"非线程安全问题", 可以使用syncronized关键字
+result:
+username=a password=aa
+username=b password=bb
+ */
+
+
+println()方法与i++联合使用时"有可能"出现另一种异常情况
+在这里对Thread()构造方法做出澄清，它会自动设置线程的名字
+public Thread​()
+Allocates a new Thread object. This constructor has the same effect as Thread (null, null, gname), where gname is a newly generated name. Automatically generated names are of the form "Thread-"+n, where n is an integer，也就是说线程创建对象
+好了名字也就自己设置好了，但是你可以重新setName()
+
+代码示例如下:
+
+package chapter01.section02.thread_1_2_4.project_1_smaeNum;
+
+public class MyThread extends Thread {
+	private int i = 5;
+	
+	@Override
+	public void run() {
+//	synchronized public void run() {
+		System.out.println("i=" + (i--) + " threadName="
+				+ Thread.currentThread().getName());
+	}
+}
+
+
+package chapter01.section02.thread_1_2_4.project_1_smaeNum;
+
+public class Run {
+	
+	
+	public static void main(String[] args) {
+		MyThread run = new MyThread();
+		
+		Thread t1 = new Thread(run);
+		Thread t2 = new Thread(run);
+		Thread t3 = new Thread(run);
+		Thread t4 = new Thread(run);
+		Thread t5 = new Thread(run);
+		
+		t1.start();
+		t2.start();
+		t3.start();
+		t4.start();
+		t5.start();
+	}
+	
+}
+
+/*
+result:
+i=4 threadName=Thread-3
+i=1 threadName=Thread-4
+i=2 threadName=Thread-5
+i=3 threadName=Thread-2
+i=5 threadName=Thread-1
+ */
+
+可以看到出现了非线程安全的问题，虽然println()方法在内部是同步的，但i--
+操作却是在进入println()之前发生的，为了防止这种情况的发生，继续使用同步
+方法
+
+
+currentThread()方法
+currentThread()方法可返回代码段正在被哪个线程调用的信息。
+public static Thread currentThread​()
+Returns a reference to the currently executing thread object.
+看下面的案例:
+package chapter01.section03.project_1_t6;
+
+public class Run1 {
+	public static void main(String args[]) {
+		System.out.println(Thread.currentThread().getName());
+	}
+}
+
+/*
+result:
+main
+*/
+结果说明: main方法被名为main的线程调用(它是用户线程)
+
+
+继续实验:
+package chapter01.section03.project_1_t6;
+
+public class MyThread extends Thread {
+	
+	public MyThread() {
+		System.out.println("构造方法的打印: " + Thread.currentThread().getName());
+	}
+	
+	@Override
+	public void run() {
+		System.out.println("run方法的打印: " + Thread.currentThread().getName());
+	}
+}
+
+
+package chapter01.section03.project_1_t6;
+
+public class Run2 {
+	public static void main(String[] args) {
+		MyThread myThread = new MyThread();
+		myThread.start();
+//		myThread.run(); //结果是由main主线程执行  结果是 run方法的打印: main
+	}
+}
+
+
+/*
+
+result:
+构造方法的打印: main
+run方法的打印: Thread-0
+ */
+从运行结果可以发现，MyThread.java类的构造函数是被main线程调用的，而run
+方法是被名称为Thread-0的线程调用的，run方法是自动调动的方法
+
+
+再来测试一个比较复杂的情况:
+package chapter01.section03.project_2_currentThreadExt;
+
+public class CountOperate extends Thread{
+	
+	public CountOperate(){
+		System.out.println("CountOperate--begin");
+		System.out.println("Thread.currentThread().getName()="
+				+ Thread.currentThread().getName());
+		System.out.println("this.getName()=" + this.getName());
+		System.out.println("CountOperate---end");
+	}
+
+	@Override
+	public void run() {
+		System.out.println("run---begin");
+		System.out.println("Thread.currentThread().getName()="
+				+ Thread.currentThread().getName());
+		System.out.println("this.getName()=" + this.getName());
+		System.out.println("run--end");
+	}
+}
+
+package chapter01.section03.project_2_currentThreadExt;
+
+public class Run {
+	public static void main(String[] args) {
+		CountOperate c = new CountOperate();
+		Thread t1 = new Thread(c);
+		t1.setName("A");
+		t1.start();
+	}
+}
+
+/*
+result:
+CountOperate--begin
+Thread.currentThread().getName()=main 构造函数在主线程main中执行
+this.getName()=Thread-0 c对象自动命名为Thread-n即Thread-0
+CountOperate---end
+run---begin
+Thread.currentThread().getName()=A t1线程对象名字为A,当前代码段正在被A线程调用
+this.getName()=Thread-0
+run--end
+*/
+这里需要说明的是:
+c的name初始值默认为Thread-0开始，t1的name初始值默认为Thread-1开始
+
+
+
+
+
+
