@@ -298,8 +298,10 @@ username=b password=bb
 println()方法与i++联合使用时"有可能"出现另一种异常情况
 在这里对Thread()构造方法做出澄清，它会自动设置线程的名字
 public Thread​()
-Allocates a new Thread object. This constructor has the same effect as Thread (null, null, gname), where gname is a newly generated name. Automatically generated names are of the form "Thread-"+n, where n is an integer，也就是说线程创建对象
-好了名字也就自己设置好了，但是你可以重新setName()
+Allocates a new Thread object. This constructor has the same effect as Thread
+(null, null, gname), where gname is a newly generated name. Automatically 
+generated names are of the form "Thread-"+n, where n is an integer，
+也就是说线程创建对象好了名字也就自己设置好了，但是你可以重新setName()
 
 代码示例如下:
 

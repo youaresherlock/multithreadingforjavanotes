@@ -1,0 +1,391 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就不
+翻译了，要不太浪费时间了，这个是我想提高自己的英文阅读水平和
+文档查看能力，想要积攒内功的人可以用有谷歌翻译自己看文档细读。
+(中文文档建议只参考，毕竟你懂得...)
+详细代码见:https://github.com/youaresherlock/multithreadingforjavanotes
+
+isAlive()方法判断当前的线程是否处于活动状态
+public final boolean isAlive​()
+Tests if this thread is alive. A thread is alive if it has
+been started and has not yet died. 
+测试这个线程是否存活。如果线程被start(),并且没有死亡那么就是存活
+Returns:
+true if this thread is alive; false otherwise.
+
+看测试程序:
+package chapter01.section04.project_1_t7;
+
+public class MyThread extends Thread {
+	
+	@Override
+	public void run() {
+		System.out.println("run=" + this.isAlive());
+	}
+}
+
+
+package chapter01.section04.project_1_t7;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException {
+		MyThread mythread = new MyThread();
+		System.out.println("begin ==" + mythread.isAlive());
+		mythread.start();
+//		Thread.sleep(1000);
+		System.out.println("end ==" + mythread.isAlive());
+	}
+}
+
+
+/*
+begin ==false
+end ==true 这个值是不确定的，因为mythread线程还没有执行完毕所以是true
+run=true
+
+加入Thread.sleep(1000);之后结果
+begin ==false
+run=true
+end ==false 输出结果为false,因为mythread对象已经在1s之内执行完毕
+*/
+
+
+下面我们举一个使用Thread.currentThread().isAlive()和
+this.isAlive()的案例。
+package chapter01.section04.project_2_isaliveOtherTest;
+
+public class CountOperate extends Thread {
+	
+	public CountOperate() {
+		System.out.println("CountOperate---begin");
+		
+		System.out.println("Thread.currentThread().getName()="
+				+ Thread.currentThread().getName());
+		System.out.println("Thread.currentThread().isAlive()="
+				+ Thread.currentThread().isAlive());
+		
+		System.out.println("this.getName()=" + this.getName());
+		System.out.println("this.isAlive()=" + this.isAlive());
+		
+		System.out.println("CountOperate---end");
+	}
+	
+	@Override
+	public void run() {
+		System.out.println("run---begin");
+		
+		System.out.println("Thread.currentThread().getName()="
+				+ Thread.currentThread().getName());
+		System.out.println("Thread.currentThread().isAlive()="
+				+ Thread.currentThread().isAlive());
+		
+		System.out.println("this.getName()=" + this.getName());
+		System.out.println("this.isAlive()=" + this.isAlive());
+		
+		System.out.println("run---end");
+	}
+}
+
+
+package chapter01.section04.project_2_isaliveOtherTest;
+
+public class Run {
+
+	public static void main(String[] args) {
+		CountOperate c = new CountOperate();
+		Thread t1 = new Thread(c);
+		System.out.println("main begin t1 isAlive=" + t1.isAlive());
+		t1.setName("A");
+		t1.start();
+		System.out.println("main end t1 isAlive=" + t1.isAlive());
+	}
+}
+
+/*
+CountOperate---begin
+Thread.currentThread().getName()=main
+Thread.currentThread().isAlive()=true
+this.getName()=Thread-0
+this.isAlive()=false
+CountOperate---end
+main begin t1 isAlive=false
+main end t1 isAlive=true
+run---begin
+Thread.currentThread().getName()=A
+Thread.currentThread().isAlive()=true
+this.getName()=Thread-0
+this.isAlive()=false
+run---end
+*/
+
+
+
+sleep()方法
+静态方法强制当前正在执行的线程休眠指定毫秒数(阻塞状态).使当前
+线程(即调用该方法的线程)暂停执行一段时间，让其他线程有机会继续
+执行，但它并不释放对象锁.调用wait()方法会释放对象的同步锁。
+public static void sleep​(long millis)
+                  throws InterruptedException
+Causes the currently executing thread to sleep (temporarily
+cease execution) for the specified number of milliseconds, 
+subject to the precision and accuracy of system timers and 
+schedulers. The thread does not lose ownership of any monitors.
+Parameters:
+millis - the length of time to sleep in milliseconds
+Throws:
+IllegalArgumentException - if the value of millis is negative
+InterruptedException - if any thread has interrupted the current 
+thread. The interrupted status of the current thread is cleared 
+when this exception is thrown.
+要注意的是就是如果参数是复数或线程被其他线程中断就会抛出异常，这里要
+捕获或者抛出一下。另外InterruptedException异常被抛出当前线程的中断状态
+被清除。
+
+来看下面的程序:
+package chapter01.section05.project_1_t8;
+
+public class MyThread1 extends Thread {
+
+	@Override 
+	public void run() {
+		try {
+			System.out.println("run threadName="
+					+ Thread.currentThread().getName() + " begin");
+			Thread.sleep(2000);
+			System.out.println("run threadName="
+					+ Thread.currentThread().getName() + " end");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section05.project_1_t8;
+
+public class Run1 {
+ public static void main(String[] args) {
+	MyThread1 mythread = new MyThread1();
+	System.out.println("begin =" + System.currentTimeMillis());
+	mythread.run();
+	System.out.println("end =" + System.currentTimeMillis());
+}
+}
+
+/*
+begin =1538226664432
+run threadName=main begin
+run threadName=main end
+end =1538226666433
+*/
+可以看到都是有main线程执行的，是同步执行
+
+package chapter01.section05.project_1_t8;
+
+public class MyThread2 extends Thread {
+	@Override
+	public void run() {
+		try {
+			System.out.println("run threadName="
+					+ Thread.currentThread().getName() + " begin ="
+					+ System.currentTimeMillis());
+			Thread.sleep(2000);
+			System.out.println("run threadName="
+					+ Thread.currentThread().getName() + " end ="
+					+ System.currentTimeMillis());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section05.project_1_t8;
+
+public class Run2 {
+	
+	public static void main(String[] args) {
+		MyThread2 mythread = new MyThread2();
+		System.out.println("begin =" + System.currentTimeMillis());
+		mythread.start();
+		System.out.println("end =" + System.currentTimeMillis());
+	}
+}
+
+
+/*
+result:
+begin =1538226948207
+end =1538226948207
+run threadName=Thread-0 begin =1538226948207
+run threadName=Thread-0 end =1538226950208
+*/
+可以看到main线程和MyThread2线程是异步执行的，首先打印的是begin和end,
+而Mythread2随后运行的，在最后两行打印runbegin和runend信息
+
+
+
+getId()方法的作用是取得线程的唯一标识
+public long getId​()
+Returns the identifier of this Thread. The thread ID is a positive
+long number generated when this thread was created. The thread ID 
+is unique and remains unchanged during its lifetime. When a thread 
+is terminated, this thread ID may be reused.
+Returns:
+this thread's ID.
+这个方法返回此线程的标识符。线程ID是在创建该线程时生成的一个正的长数字。线
+程ID是唯一的,在其生命周期中保持不变。当一个线程终止时，这个线程ID可以被重用
+package chapter01.section06.project_1_runThread;
+
+public class Test {
+	public static void main(String[] args) {
+		Thread runThread = Thread.currentThread();
+		System.out.println(runThread.getName() + " " + runThread.getId());
+	}
+}
+
+/*
+result:
+main 1
+*/
+可以看到当前执行代码的线程名称为main,线程id值为1
+
+
+
+停止线程
+停止一个线程意味着在线程处理完任务之前停掉正在做的操作，也就是放弃当前的操
+作。
+在java中有以下三种方法可以终止正在运行的线程
+1) 使用退出标志，使线程正常退出，也就是当run方法完成后线程终止	
+	这个方法就是我在用Python写进线程管理系统的时候用到的方法
+2) 使用stop方法强制终止线程，但是不推荐使用这个方法。因为stop和
+suspend(暂停线程)及resume(恢复线程)一样，都是作废过期的方法，使用
+他们可能产生不可预料的结果
+3) 使用interrupt方法中断线程
+
+interrupt()方法
+我们看看文档:
+public void interrupt​()
+Interrupts this thread.
+Unless the current thread is interrupting itself, which is always 
+permitted, the checkAccess method of this thread is invoked, which 
+may cause a SecurityException to be thrown.
+
+这个是说线程在调用这些方法时会被阻塞，它的中断状态将被清除
+If this thread is blocked in an invocation of the wait(), wait(long), 
+or wait(long, int) methods of the Object class, or of the join(), 
+join(long), join(long, int), sleep(long), or sleep(long, int), methods 
+of this class, then its interrupt status will be cleared and it will 
+receive an InterruptedException.
+
+如果在InterruptibleChannel上的IO操作中阻塞了这个线程，那么通道被关闭，中断状态被
+设置，线程接收到CloseByInterruptException
+If this thread is blocked in an I/O operation upon an InterruptibleChannel 
+then the channel will be closed, the thread's interrupt status will be set, 
+and the thread will receive a ClosedByInterruptException.
+
+If this thread is blocked in a Selector then the thread's interrupt status 
+will be set and it will return immediately from the selection operation, 
+possibly with a non-zero value, just as if the selector's wakeup method 
+were invoked.
+
+如果以上条件都不成立，则会设置此线程的中断状态
+If none of the previous conditions hold then this thread's interrupt status 
+will be set.
+中断一个不存活的线程没有任何影响
+Interrupting a thread that is not alive need not have any effect.
+
+Throws:
+SecurityException - if the current thread cannot modify this thread
+
+调用interrupt()方法仅仅是在当前线程中打了一个停止的标记，并不是真的停
+止线程
+看例子:
+package chapter01.section07.thread_1_7_1.project_1_t11;
+
+public class MyThread extends Thread {
+
+	@Override
+	public void run() {
+		super.run();
+		for(int i = 0; i < 500000; i++) {
+			System.out.println("i=" + (i + 1));
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_1.project_1_t11;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(2000);
+			thread.interrupt();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+.........
+i=4999974
+i=4999975
+i=4999976
+i=4999977
+i=4999978
+i=4999979
+i=4999980
+i=4999981
+i=4999982
+i=4999983
+i=4999984
+.........
+*/
+可以看到调用interrupt方法并没有停止线程
+If none of the previous conditions hold then this thread's interrupt 
+status will be set.
+Interrupting a thread that is not alive need not have any effect.
+可以看到文档说了前面几种清除interrupt status中断状态的情况，如果没有
+之前的情况，那么这个线程的中断状态会被设置。也就是说设置了中断状态了
+
+
+
+判断线程是否停止状态
+在Java的SDK中，Thread.java类提供了两种方法
+1) this.interrupt(); 测试当前线程是否已经中断
+2) this.isInterrupted(); 测试线程是否已经中断
+我们看文档:
+interrupted()方法
+public static boolean interrupted​()
+静态方法，测试当前线程是否已经被中断。线程的中断状态由该方法清除。换句话说，
+如果连续两次调用该方法，则第二次调用返回false(在第一次调用已清除了其中断
+状态之后，且第二次调用检验完中断状态前，当前线程再次中断的情况除外)
+Tests whether the current thread has been interrupted. The interrupted 
+status of the thread is cleared by this method. In other words, if 
+this method were to be called twice in succession, the second call 
+would return false (unless the current thread were interrupted again, 
+after the first call had cleared its interrupted status and before 
+the second call had examined it).
+A thread interruption ignored because a thread was not alive at the 
+time of the interrupt will be reflected by this method returning false.
+
+Returns:
+true if the current thread has been interrupted; false otherwise.
+See Also:
+isInterrupted()
+
+
+
+
+
