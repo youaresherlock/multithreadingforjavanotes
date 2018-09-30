@@ -1,0 +1,520 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就不
+翻译了，要不太浪费时间了，这个是我想提高自己的英文阅读水平和
+文档查看能力，想要积攒内功的人可以用有谷歌翻译自己看文档细读。
+(中文文档建议只参考，毕竟你懂得...)
+详细代码见:https://github.com/youaresherlock/multithreadingforjavanotes
+
+
+1)我们可以判断一下线程是否是停止状态，如果是停止状态，
+则run后面的代码不再运行即可。
+package chapter01.section07.thread_1_7_3.project_1_t13;
+
+public class MyThread extends Thread{
+
+	@Override
+	public void run() {
+		super.run();
+		
+		for(int i = 0; i < 500000; i++) {
+			//当前线程是否中断转改，执行后悔清除状态标志位false
+			if(Thread.interrupted()) {
+				System.out.println("已经是停止状态了!我要退出了!");
+				break;
+			}
+			System.out.println("i=" + (i + 1));
+		}
+		//System.out.println("我被输出，如果此代码是for又继续运行，线程并未停止！");
+	}
+}
+
+
+package chapter01.section07.thread_1_7_3.project_1_t13;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(2000);
+			thread.interrupt();
+		} catch (InterruptedException e) {
+			System.out.println("main catch");
+			e.printStackTrace();
+		}
+		System.out.println("end!");
+	}
+
+}
+
+/*
+result:
+......
+i=454658
+i=454659
+i=454660
+end!
+已经是停止状态了!我要退出了!
+*/
+去掉注释之后，break跳出for循环还要继续执行，结果如下
+/*
+result:
+........
+i=487355
+i=487356
+i=487357
+end!
+已经是停止状态了!我要退出了!
+我被输出，如果此代码是for又继续运行，线程并未停止！
+*/
+
+如果中断状态被设置，那么我们主动抛出异常来停止run的进一步执行
+package chapter01.section07.thread_1_7_3.project_3_t13_1;
+
+public class MyThread extends Thread{
+	@Override
+	public void run() {
+		try {
+			for(int i = 0; i < 500000; i++) {
+				if(Thread.interrupted()) {
+					System.out.println("已经是停止状态了!我要退出了!");
+					throw new InterruptedException();
+				}
+				System.out.println("i=" + (i + 1));
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			System.out.println("进MyThread.java类run方法中的catch了!");
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_3.project_3_t13_1;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(2000);
+			thread.interrupt();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			System.out.println("main catch");
+			e.printStackTrace();
+		}
+	}
+
+}
+
+
+/*
+........
+i=424944
+i=424945
+已经是停止状态了!我要退出了!
+进MyThread.java类run方法中的catch了!
+java.lang.InterruptedException
+	at chapter01.section07.thread_1_7_3.
+	project_3_t13_1.MyThread.run(MyThread.java:10)
+ */
+
+
+
+2)如果线程在sleep()状态下停止线程，前面文档所说会抛出异常InterruptedException
+我们测试一下
+package chapter01.section07.thread_1_7_4.project_1_t14;
+
+public class MyThread extends Thread {
+	@Override
+	public void run() {
+		super.run();
+		try {
+			System.out.println("run begin");
+			Thread.sleep(200000);
+			System.out.println("run end");
+		} catch (InterruptedException e) {
+			System.out.println("在沉睡中被停止!进入catch!"+this.isInterrupted());
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_4.project_1_t14;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(200);
+			thread.interrupt();
+		} catch (InterruptedException e) {
+			System.out.println("main catch");
+			e.printStackTrace();
+		}
+		System.out.println("end!");
+	}
+
+}
+
+/*
+result:
+run begin
+end!
+在沉睡中被停止!进入catch!false
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleep(Native Method)
+	at chapter01.section07.thread_1_7_4.project_1_t14.
+	MyThread.run(MyThread.java:9)
+*/
+可以看到在sleep()状态下停止某一线程，会有InterruptedException异常
+,并且清除停止状态值，为false
+
+前面的程序时先sleep，然后中断，我们现在来与之相反的实验
+package chapter01.section07.thread_1_7_4.project_1_t15;
+
+public class MyThread extends Thread {
+	@Override
+	public void run() {
+		super.run();
+		try {
+			for(int i=0;i<100000;i++){
+				System.out.println("i="+(i+1));
+			}
+			System.out.println("run begin");
+			Thread.sleep(200000);
+			System.out.println("run end");
+		} catch (InterruptedException e) {
+			System.out.println("先停止，再遇到了sleep!进入catch!");
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_4.project_1_t15;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		MyThread thread = new MyThread();
+		thread.start();
+		thread.interrupt();
+		System.out.println("end!");
+	}
+
+}
+
+/*
+result:
+i=100000
+run begin
+先停止，再遇到了sleep!进入catch!
+java.lang.InterruptedException: sleep interrupted
+	at java.base/java.lang.Thread.sleep(Native Method)
+	at chapter01.section07.thread_1_7_4.project_1_t15.
+	MyThread.run(MyThread.java:12)
+*/
+
+
+3)stop()方法暴利停止线程
+@Deprecated(since="1.2")
+public final void stop​()
+Deprecated. This method is inherently unsafe. Stopping a thread with 
+Thread.stop causes it to unlock all of the monitors that it has locked 
+(as a natural consequence of the unchecked ThreadDeath exception 
+propagating up the stack). If any of the objects previously protected 
+by these monitors were in an inconsistent state, the damaged objects 
+become visible to other threads, potentially resulting in arbitrary 
+behavior. Many uses of stop should be replaced by code that simply 
+modifies some variable to indicate that the target thread should stop 
+running. The target thread should check this variable regularly, and 
+return from its run method in an orderly fashion if the variable 
+indicates that it is to stop running. If the target thread waits 
+for long periods (on a condition variable, for example), the interrupt 
+method should be used to interrupt the wait.
+这个方法自从jdk1.2被废弃
+这个方法从根本上是不安全的。用stop()方法来停止一个线程将释放它已经锁定的所有监视
+器(作为沿着堆栈向上传播的未检查ThreadDeath异常的一个自然后果)。如果以前受这些
+监视器保护的任何对象都处于一种不一致的状态，则损坏的对象将对其他线程可见，这有可能
+导致任意的行为。stop的许多实用都应该由只修改某些变量以指示目标线程应该停止运行的
+代码来取代。目标线程应定期检查该变量，并且如果该变量指示它要停止运行，则从其run
+方法井然有序的返回。如果目标线程等待很长时间(例如基于一个条件变量)，则应使用
+interrupt方法来中断该等待。
+
+package chapter01.section07.thread_1_7_5.project_1_useStopMethodThreadTest;
+
+public class MyThread extends Thread {
+	private int i = 0;
+	
+	@Override
+	public void run() {
+		try {
+			while(true) {
+				i++;
+				System.out.println("i=" + i);
+				Thread.sleep(1000);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_5.project_1_useStopMethodThreadTest;
+
+public class Run {
+
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(8000);
+			thread.stop();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+		}
+	}
+}
+
+/*
+result:
+i=1
+i=2
+i=3
+i=4
+i=5
+i=6
+i=7
+i=8
+ */
+由文档和程序结果可以看到这种方法太暴力和不安全了
+
+
+
+调用stop()方法会抛出java.lang.ThreadDeath异常，但在通常情况下，此异常
+不需要显示地捕获
+package chapter01.section07.thread_1_7_6.project_1_runMethodUseStopMethod;
+
+public class MyThread extends Thread {
+	@Override
+	public void run() {
+		try {
+			this.stop();
+		} catch (ThreadDeath e) {
+			System.out.println("进入了catch()方法！");
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_6.project_1_runMethodUseStopMethod;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread thread = new MyThread();
+		thread.start();
+	}
+}
+
+/*
+result:
+进入了catch()方法！
+java.lang.ThreadDeath
+	at java.base/java.lang.Thread.stop(Unknown Source)
+	at chapter01.section07.thread_1_7_6.
+	project_1_runMethodUseStopMethod.MyThread.run(MyThread.java:7)
+ */
+ 总结: stop()方法已经被作废，因为如果强制让线程停止则有可能使一些请理性的
+ 工作得不到完成。另外一个情况就是对锁定的对象进行了"解锁"，导致数据得不到同
+ 步处理，出现数据不一致的问题
+
+
+
+stop方法释放锁的不良后果
+使用stop()释放锁将会给数据造成不一致的结果。如果出现这样的情况，程序处理的
+数据就有可能遭到破坏，最终导致程序执行的流程结果错误。
+举个例子:
+package chapter01.section07.thread_1_7_7.project_1_stopThrowLock;
+
+public class SynchronizedObject {
+	private String username = "a";
+	private String password = "aa";
+	
+	public String getUsername() {
+		return username;
+	}
+	
+	public void setUsername(String username) {
+		this.username = username;
+	}
+	
+	public String getPassword() {
+		return password;
+	}
+	
+	public void setPassword(String password) {
+		this.password = password;
+	}
+	
+	
+	synchronized public void printString(String username,
+			String password) {
+		try {
+			this.username = username;
+			Thread.sleep(100000);
+			this.password = password;
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_7.project_1_stopThrowLock;
+
+public class MyThread extends Thread{
+	
+	private SynchronizedObject object;
+	
+	public MyThread(SynchronizedObject object) {
+		super();
+		this.object = object;
+	}
+	
+	@Override
+	public void run(){
+		object.printString("b", "bb");
+	}
+}
+
+
+package chapter01.section07.thread_1_7_7.project_1_stopThrowLock;
+
+public class Run {
+
+	public static void main(String[] args) {
+		try {
+			SynchronizedObject object = new SynchronizedObject();
+			MyThread thread = new MyThread(object);
+			thread.start();
+			Thread.sleep(500);
+			thread.stop();
+			System.out.println(object.getUsername() + " " 
+					+ object.getPassword());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+/*
+result:
+b aa
+ */
+可以看到数据出现了不同步的问题，数据错乱了，所以不建议在程序中使用
+stop()方法
+
+
+
+4)使用return停止线程
+将方法interrupt()与return结合使用也能实现停止线程的效果
+package chapter01.section07.thread_1_7_8.project_1_use_ReturnInterrupt;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		while(true) {
+			if(this.isInterrupted()) {
+				System.out.println("停止了!");
+				return;
+			}
+			System.out.println("timer=" + System.currentTimeMillis());
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_8.project_1_use_ReturnInterrupt;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread t = new MyThread();
+			t.start();
+			Thread.sleep(2000);
+			t.interrupt();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+
+/*
+result:
+...................
+timer=1538321310471
+timer=1538321310471
+timer=1538321310471
+timer=1538321310471
+timer=1538321310471
+停止了!
+ */
+总结: 建议使用"抛出异常"法来实现线程的停止，因为在catch块中可以对
+异常的信息进行相关的处理，而且使用异常流能更好的、更方便的控制程序的运行
+流程，不至于代码中出现很多个return;造成污染。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

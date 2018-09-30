@@ -7,7 +7,7 @@ public class MyThread extends Thread {
 		super.run();
 		for(int i = 0; i < 10000; i++) {
 			System.out.println("i=" + (i + 1));
-			System.out.println("ÊÇ·ñÍ£Ö¹? =" + i + " " +  this.isInterrupted());
+			//System.out.println("ÊÇ·ñÍ£Ö¹? =" + i + " " +  this.isInterrupted());
 		}
 	}
 }
