@@ -1,0 +1,13 @@
+package chapter01.section07.thread_1_7_2.project_1_t12;
+
+public class MyThread extends Thread {
+	
+	@Override
+	public void run() {
+		super.run();
+		for(int i = 0; i < 10000; i++) {
+			System.out.println("i=" + (i + 1));
+			System.out.println("ÊÇ·ñÍ£Ö¹? =" + i + " " +  this.isInterrupted());
+		}
+	}
+}

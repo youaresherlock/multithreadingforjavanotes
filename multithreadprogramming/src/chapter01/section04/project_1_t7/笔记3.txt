@@ -231,7 +231,7 @@ run threadName=Thread-0 end =1538226950208
 
 
 
-getId()方法的作用是取得线程的唯一标识
+getId()方法的作用是取得线程的唯一标识 也就是TID，进程号是PID
 public long getId​()
 Returns the identifier of this Thread. The thread ID is a positive
 long number generated when this thread was created. The thread ID 
@@ -363,7 +363,7 @@ Interrupting a thread that is not alive need not have any effect.
 
 判断线程是否停止状态
 在Java的SDK中，Thread.java类提供了两种方法
-1) this.interrupt(); 测试当前线程是否已经中断
+1) this.interrupted(); 测试当前线程是否已经中断
 2) this.isInterrupted(); 测试线程是否已经中断
 我们看文档:
 interrupted()方法
@@ -386,6 +386,152 @@ See Also:
 isInterrupted()
 
 
+公有的isInterrupted()方法，返回值是布尔值
+public boolean isInterrupted​()
+测试是否当前线程被中断.线程的中断状态不被这个方法影响
+Tests whether this thread has been interrupted. The interrupted status 
+of the thread is unaffected by this method.
+如果线程不存活，则线程中断将被忽略.如果存活线程被中断了，那么这个方法将返回false
+A thread interruption ignored because a thread was not alive at the 
+time of the interrupt will be reflected by this method returning false.
+
+Returns:
+如果线程被中断则为真，否则为假
+true if this thread has been interrupted; false otherwise.
+See Also:
+interrupted()
+
+Thread.interrupted()直接看程序:
+package chapter01.section07.thread_1_7_2.project_1_t12;
+
+public class MyThread extends Thread {
+	
+	@Override
+	public void run() {
+		for(int i = 0; i < 500000; i++) {
+			System.out.println("i=" + (i + 1));
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_2.project_1_t12;
+
+public class Run {
+	
+	 public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(1000);
+			thread.interrupt();
+			System.out.println("线程是否停止1? =" + 
+				Thread.interrupted()); //interrupted()方法是抽象方法
+			System.out.print("线程是否停止2? =" + 
+				thread.interrupted());	//线程的中断状态将被该方法清除		
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			System.out.println("main catch");
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+i=4996
+i=4997
+i=4998
+i=4999
+i=5000
+是否停止1? =false
+是否停止2? =false
+ */
+我们在Run类中thread.interrupt()只是给thread线程设置了中断状态，而
+Thread.interrupted()和thread.interrupted()是一样的(静态方法)，
+都是测试当前线程是否中断，而当前线程是main主线程，因此是false
+
+
+我们现在让主线程调用interrupt()方法，然后调用Thread.interrupted()方法
+package chapter01.section07.thread_1_7_2.project_1_t12;
+
+public class Run1 {
+
+	public static void main(String[] args) {
+		Thread.currentThread().interrupt();
+		System.out.println("是否停止1? =" + Thread.interrupted());
+		System.out.println("是否停止2? =" + Thread.interrupted());
+	}
+}
+
+/**
+result:
+是否停止1? =true
+是否停止2? =false
+ */
+ 可以看到确实中断，然后因为调用了Thread.interrupted()方法清除了中断状态，
+ 因此又是false
 
 
 
+再看this.isInterrupted()方法案例:
+package chapter01.section07.thread_1_7_2.project_1_t12;
+
+public class MyThread extends Thread {
+	
+	@Override
+	public void run() {
+		super.run();
+		for(int i = 0; i < 10000; i++) {
+			System.out.println("i=" + (i + 1));
+			System.out.println("是否停止? =" + i + " " +  this.isInterrupted());
+		}
+	}
+}
+
+
+package chapter01.section07.thread_1_7_2.project_1_t12;
+
+public class Run2 {
+
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			thread.interrupt();
+			Thread.sleep(1000);
+			System.out.println("是否停止1? =" + thread.isInterrupted());
+			System.out.println("是否停止2? =" + thread.isInterrupted());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			System.out.println("main catch");
+			e.printStackTrace();
+		}
+	}
+}
+
+/*
+ MyThread.java中加入注释内容之后
+...
+i=9995
+是否停止? =9994 true
+i=9996
+是否停止? =9995 true
+i=9997
+是否停止? =9996 true
+i=9998
+是否停止? =9997 true
+i=9999
+是否停止? =9998 true
+i=10000
+是否停止? =9999 true
+是否停止1? =false
+是否停止2? =false
+*/
+可以看到都是true,最后thread线程结束之后是false
+
+最后总结一下:
+1)this.interrupted():
+	测试当前线程是否已经是中断状态，执行后具有将状态标志清除为
+false的功能
+2)this.isinterrupted():
+	测试线程Thread对象是否已经是中断状态，但不清楚状态标志。
