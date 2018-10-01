@@ -300,7 +300,7 @@ i=6
 i=7
 i=8
  */
-由文档和程序结果可以看到这种方法太暴力和不安全了
+由开发文档和程序结果可以看到这种方法太暴力和不安全了
 
 
 
@@ -480,6 +480,173 @@ timer=1538321310471
 总结: 建议使用"抛出异常"法来实现线程的停止，因为在catch块中可以对
 异常的信息进行相关的处理，而且使用异常流能更好的、更方便的控制程序的运行
 流程，不至于代码中出现很多个return;造成污染。
+
+
+
+暂停线程
+暂停线程意味着此线程还可以恢复运行。在Java多线程中，可以使用suspend()方
+法暂停线程，使用resume()方法恢复线程的运行
+我后面单独写一篇博客翻译一下Why are Thread.stop, Thread.suspend and Thread.resume Deprecated?.
+这个Oracle给出的官方文档，看一下官方文档如何解释stop()、suspend()、resume()方法被废弃?
+而不是看中文书或者中文文档，想要了解的开发者可以参考
+https://docs.oracle.com/javase/9/docs/api/java/lang/doc-files/threadPrimitiveDeprecation.html
+5)suspend()方法
+@Deprecated(since="1.2")
+public final void suspend​()
+Deprecated. This method has been deprecated, as it is inherently 
+deadlock-prone. If the target thread holds a lock on the monitor 
+protecting a critical system resource when it is suspended, no thread 
+can access this resource until the target thread is resumed. If the 
+thread that would resume the target thread attempts to lock this monitor 
+prior to calling resume, deadlock results. Such deadlocks typically 
+manifest themselves as "frozen" processes. For more information, see 
+Why are Thread.stop, Thread.suspend and Thread.resume Deprecated?.
+Suspends this thread.
+First, the checkAccess method of this thread is called with no arguments. 
+This may result in throwing a SecurityException (in the current thread).
+
+If the thread is alive, it is suspended and makes no further progress 
+unless and until it is resumed.
+
+Throws:
+SecurityException - if the current thread cannot modify this thread.
+suspend()方法自从jdk1.2之后就被废弃了
+这个方法已经被废弃了，因为它固有地会造成死锁。如果目标线程在监视器上持有
+一个锁，该锁在挂起时保护一个关键的系统资源，没有线程可以访问这个资源，直到
+目标线程调用resume()方法恢复线程的执行。如果将恢复目标线程的线程试图在调用
+resume()方法之前锁定此监视器，则造成死锁。这种死锁通常表现为"冻结"进程。有关
+更多信息，请参见为何Thread.stop,Thread.suspend 和Thread.resume被废弃?
+暂停这个线程
+首先，调用这个线程的checkAccess()方法不带形式参数，这可能导致抛出
+SecurityException异常(在当前线程中)
+如果线程是存活状态，它被挂起，并且除非调用resume()方法，否则不会在继续执行。
+抛出:
+SecurityException - 如果当前线程不能修改此线程
+
+6)resume()方法
+@Deprecated(since="1.2")
+public final void resume​()
+Deprecated. This method exists solely for use with suspend(), which 
+has been deprecated because it is deadlock-prone. For more information, 
+see Why are Thread.stop, Thread.suspend and Thread.resume Deprecated?.
+Resumes a suspended thread.
+First, the checkAccess method of this thread is called with no arguments. 
+This may result in throwing a SecurityException (in the current thread).
+
+If the thread is alive but suspended, it is resumed and is permitted to 
+make progress in its execution.
+
+Throws:
+SecurityException - if the current thread cannot modify this thread.
+该方法在jdk1.2之后被废弃
+这个方法单独与suspend()方法使用,suspend()方法因为容易造成死锁而被废弃。要得到
+更多的信息，可以查看为什么Thread.stop,Thread.suspend,Thread.resume方法被废弃?
+恢复一个暂停的线程
+首先，这个线程的checkAcess()方法如果没有传入形式参数调用，这可能会造成抛出
+SecurityException异常(在当前线程中)
+
+如果这个线程是存活状态但是被挂起，它被恢复并且允许执行它的程序
+
+抛出:
+SecurityException - 如果当前线程不能修改这个线程
+
+我们看使用suspend()方法和resume()方法的案例:
+package chapter01.section08.project_1_suspend_resume_test;
+
+public class MyThread extends Thread {
+	private long i = 0;
+
+	public long getI() {
+		return i;
+	}
+
+	public void setI(long i) {
+		this.i = i;
+	};
+	
+	@Override
+	public void run() {
+		while(true) {
+			i++;
+		}
+	}
+}
+
+
+package chapter01.section08.project_1_suspend_resume_test;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(5000);
+			//A段
+			thread.suspend(); //挂起线程
+			System.out.println("A= " + System.currentTimeMillis() + " i="
+					+ thread.getI());
+			Thread.sleep(5000);
+			System.out.println("A= " + System.currentTimeMillis() + " i="
+					+ thread.getI());
+			
+			//B
+			thread.resume(); //恢复线程
+			Thread.sleep(5000);
+			
+			
+			//C
+			thread.suspend();
+			System.out.println("B=" + System.currentTimeMillis() + " i="
+					+ thread.getI());
+			Thread.sleep(5000);
+			System.out.println("B=" + System.currentTimeMillis() + " i+"
+					+ thread.getI());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+A= 1538357269859 i=1777425337
+A= 1538357274860 i=1777425337
+B= 1538357279861 i=2932004332
+B= 1538357284861 i=2932004332
+*/
+我们看到线程明显暂停了，同时时间间隔是大约都是5秒
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
