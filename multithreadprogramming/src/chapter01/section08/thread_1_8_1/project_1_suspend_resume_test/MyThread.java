@@ -1,5 +1,4 @@
-package chapter01.section08.project_1_suspend_resume_test;
-
+package chapter01.section08.thread_1_8_1.project_1_suspend_resume_test;
 public class MyThread extends Thread {
 	private long i = 0;
 

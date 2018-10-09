@@ -1,5 +1,4 @@
-package chapter01.section08.project_1_suspend_resume_test;
-
+package chapter01.section08.thread_1_8_1.project_1_suspend_resume_test;
 public class Run {
 	
 	public static void main(String[] args) {
@@ -7,8 +6,8 @@ public class Run {
 			MyThread thread = new MyThread();
 			thread.start();
 			Thread.sleep(5000);
-			//A¶Î
-			thread.suspend(); //¹ÒÆğÏß³Ì
+			//Aæ®µ
+			thread.suspend(); //æŒ‚èµ·çº¿ç¨‹
 			System.out.println("A= " + System.currentTimeMillis() + " i="
 					+ thread.getI());
 			Thread.sleep(5000);
@@ -16,7 +15,7 @@ public class Run {
 					+ thread.getI());
 			
 			//B
-			thread.resume(); //»Ö¸´Ïß³Ì
+			thread.resume(); //æ¢å¤çº¿ç¨‹
 			Thread.sleep(5000);
 			
 			

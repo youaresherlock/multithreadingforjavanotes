@@ -12,7 +12,7 @@ public class MyThread extends Thread {
 		super.run();
 		while(count > 0) {
 			count--;
-			System.out.println("”… " + this.currentThread().getName() 
+			System.out.println("”… " + Thread.currentThread().getName() 
 					+ " º∆À„, count=" + count);
 		}
 	}

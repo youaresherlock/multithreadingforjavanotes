@@ -1,0 +1,676 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+详细代码见:https://github.com/youaresherlock/multithreadingforjavanotes
+
+1.suspend与resume方法的缺点
+在使用suspend与resume方法时，如果使用不当，极易造成公共的同步对象
+的独占,使得其他线程无法访问公共同步对象
+
+package chapter01.section08.thread_1_8_2.project_1_suspend_resume_deal_lock;
+
+public class SynchronizedObject {
+	synchronized public void printString() {
+		System.out.println("begin");
+		if(Thread.currentThread().getName().equals("a")) {
+			System.out.println("a线程永远 suspend了!");
+			Thread.currentThread().suspend();
+		}
+		System.out.println("end");
+	}
+}
+
+
+package chapter01.section08.thread_1_8_2.project_1_suspend_resume_deal_lock;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			final SynchronizedObject object = 
+					new SynchronizedObject();
+			Thread thread1 = new Thread() {
+				@Override
+				public void run() {
+					object.printString();
+				}
+			};
+			
+			thread1.setName("a");
+			thread1.start();
+			
+			Thread.sleep(1000);
+			
+			Thread thread2 = new Thread() {
+				@Override
+				public void run() {
+					System.out
+						.println("thread2启动了，但进入不了printString()方法!只打印1个begin");
+					System.out
+						.println("因为printString()方法被a线程锁定并且永远的suspend暂停了!");
+					object.printString();
+				}
+			};
+			thread2.start();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+begin
+a线程永远 suspend了!
+thread2启动了，但进入不了printString()方法!只打印1个begin
+因为printString()方法被a线程锁定并且永远的suspend暂停了!
+*/
+
+
+
+在看另外一种独占锁的情况
+package chapter01.section08.thread_1_8_2.project_2_suspend_resume_LockStop;
+
+public class MyThread extends Thread {
+	private long i = 0;
+	
+	@Override
+	public void run() {
+		while(true) {
+			i++;
+			//System.out.println(i);
+		}
+	}
+}
+
+
+package chapter01.section08.thread_1_8_2.project_2_suspend_resume_LockStop;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.start();
+			Thread.sleep(1000);
+			thread.suspend();
+			System.out.println("main end!");
+		} catch (Exception e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+不带注释代码的结果result:
+......
+215359
+215360
+215361
+215362
+215363
+215364
+215365
+带上注释代码的结果:
+main end!
+ */
+结果分析:
+可以看到println实现方式如下；
+public void println(char x[]) {
+        synchronized (this) {
+            print(x);
+            newLine();
+        }
+    }
+
+当程序运行到println()方法内部停止时，同步锁未被释放。这导致当前
+PrintStream对象的println()方法一直呈"暂停"状态，并且"锁未释放"，
+而main()方法中的代码System.out.println("main end!");迟迟不能
+执行打印
+
+
+
+2.suspend与resume方法的缺点是不同步问题
+在使用suspend和resume方法时也容易造成因为线程的暂停而导致数据不同步的情况
+举个例子:
+package chapter01.section08.thread_1_8_3.project_1_suspend_resume_nosameValue;
+
+public class MyObject {
+	private String username = "1";
+	private String password = "11";
+	
+	public void setValue(String u, String p) {
+		this.username = u;
+		if(Thread.currentThread().getName().equals("a")) {
+			System.out.println("停止a线程!");
+			Thread.currentThread().suspend();
+		}
+		this.password = p;
+	}
+	
+	public void printUsernamePassword() {
+		System.out.println(username + " " + password);
+	}
+}
+
+
+package chapter01.section08.thread_1_8_3.project_1_suspend_resume_nosameValue;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException {
+		final MyObject myobject = new MyObject();
+		
+		Thread thread1 = new Thread() {
+			@Override
+			public void run() {
+				myobject.setValue("a", "aa");
+			}
+		};
+		thread1.setName("a");
+		thread1.start();
+		
+		Thread.sleep(500);
+		
+		Thread thread2 = new Thread() {
+			@Override
+			public void run() {
+				myobject.printUsernamePassword();
+			}
+		};
+		
+		thread2.start();
+	}
+}
+/*
+result:
+停止a线程!
+a 11
+*/
+可以看到出现值的不同步问题
+
+
+
+3.yeild()方法
+yeild()方法会放弃CPU资源，锁资源不会放弃的
+yield()方法的作用是放弃当前CPU资源，将它让给其他的任务去占用CPU时间
+。但放弃的时间不确定，有可能刚刚放弃，马上又获得CPU时间片
+我们看一下官方文档:
+可以看到是一个静态的方法
+public static void yield​()
+
+A hint to the scheduler that the current thread is willing to yieldits 
+current use of a processor. The scheduler is free to ignore this hint. 
+Yield is a heuristic attempt to improve relative progression between 
+threads that would otherwise over-utilise a CPU. Its use should be combined 
+with detailed profiling and benchmarking to ensure that it actually has the 
+desired effect. 
+这个方法提示调度器当前线程有意愿放弃当前处理器的使用。调度器有权利忽略这个提示。
+在可能会过度使用CPU的线程之间，yield是一个启发性尝试来提升相对进展。它的使用应当与
+详细的分析和基准测试结合，来确保它实际上具有预期的效果
+
+It is rarely appropriate to use this method. It may be useful for debugging 
+or testing purposes, where it may help to reproduce bugs due to race conditions. 
+It may also be useful when designing concurrency control constructs such as 
+the ones in the java.util.concurrent.locks package.
+这个方法很少被使用。它可能对调试和测试有用，由于竞态条件它可能会帮助产生bugs.它同样在
+设计并发控制结果的时候有作用，例如java.util.concurrent.locks包中的应用
+
+eg:
+package chapter01.section09.project_1_t17;
+
+public class MyThread extends Thread {
+	
+	@Override
+	public void run() {
+		long beginTime = System.currentTimeMillis();
+		int count = 0;
+		for(int i = 0; i < 50000000; i++) {
+			//Thread.yield();
+			count = count + (i + 1);
+		}
+		long endTime = System.currentTimeMillis();
+		System.out.println("用时: " + (endTime - beginTime) + "毫秒!");
+	}
+}
+
+
+package chapter01.section09.project_1_t17;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread thread = new MyThread();
+		thread.start();
+	}
+}
+
+/*
+不带注释result:
+用时: 11206毫秒!
+加上注释result:
+用时: 20毫秒!
+ */
+
+
+
+4.线程的优先级setPriority()方法
+在操作系统中，线程可以划分优先级，优先级较高的线程得到的CPU资源较多，也就
+是CPU优先执行优先级较高的线程对象中的任务。设置线程优先级有助于帮助"线程规划器"
+确定在下一次选择哪一个线程来优先执行。
+JDK源代码:
+/**
+ * Changes the priority of this thread.
+ * <p>
+ * First the <code>checkAccess</code> method of this thread is called
+ * with no arguments. This may result in throwing a
+ * <code>SecurityException</code>.
+ * <p>
+ * Otherwise, the priority of this thread is set to the smaller of
+ * the specified <code>newPriority</code> and the maximum permitted
+ * priority of the thread's thread group.
+ *
+ * @param newPriority priority to set this thread to
+ * @exception  IllegalArgumentException  If the priority is not in the
+ *               range <code>MIN_PRIORITY</code> to
+ *               <code>MAX_PRIORITY</code>.
+ * @exception  SecurityException  if the current thread cannot modify
+ *               this thread.
+ * @see        #getPriority
+ * @see        #checkAccess()
+ * @see        #getThreadGroup()
+ * @see        #MAX_PRIORITY
+ * @see        #MIN_PRIORITY
+ * @see        ThreadGroup#getMaxPriority()
+ */
+public final void setPriority(int newPriority) {
+    ThreadGroup g;
+    checkAccess();
+    if (newPriority > MAX_PRIORITY || newPriority < MIN_PRIORITY) {
+        throw new IllegalArgumentException();
+    }
+    if((g = getThreadGroup()) != null) {
+        if (newPriority > g.getMaxPriority()) {
+            newPriority = g.getMaxPriority();
+        }
+        setPriority0(priority = newPriority);
+    }
+}
+可以看到整个程序逻辑是:
+1.检查是否当前线程可以修改这个线程，不能抛出SecurityException
+2.判断newPriority参数是否在合法的范围内[1, 10],否则抛出IllegalArgumentException
+3.获得当前线程的组，如果newPriority大于组内最大，则赋值
+4.然后setPriority0()方法调用设置
+
+文档解释:
+public final void setPriority​(int newPriority)
+
+Changes the priority of this thread. 
+First the checkAccess method of this thread is calledwith no arguments. This 
+may result in throwing a SecurityException. 
+这个方法用来改变这个线程的优先级
+首先checkAcess()方法的调用时无参数的。这个方法可能会抛出SecurityException异常
+
+Otherwise, the priority of this thread is set to the smaller of the specified 
+newPriority and the maximum permitted priority of the thread's thread group.
+Parameters:newPriority - priority to set this thread to
+Throws:
+IllegalArgumentException - If the priority is not in the range MIN_PRIORITY to 
+MAX_PRIORITY.
+SecurityException - if the current thread cannot modifythis thread.
+否则，当前线程的优先级是min(newPriority, maximum of the group)
+参数: newPriority - 设置线程的优先级
+抛出:
+非法参数异常 - 如果newPriority不在[1, 10]范围内则抛出此异常
+安全异常: 如果当前线程不能修改这个线程，则由安全管理器抛出次异常，指示存在安全侵犯
+
+JDK中使用三个常量来预置定义优先级的值
+/**
+ * The minimum priority that a thread can have.
+ */
+public final static int MIN_PRIORITY = 1;
+
+/**
+ * The default priority that is assigned to a thread.
+ */
+public final static int NORM_PRIORITY = 5;
+
+/**
+ * The maximum priority that a thread can have.
+ */
+public final static int MAX_PRIORITY = 10;
+可以看到优先级分为最小、默认、以及最大优先级，范围是[1, 10]
+
+
+5.在Java中，线程的优先级具有继承性，例如A线程启动B线程，则B线程的优先级与A是一样的
+Thread源码中有这样一段代码: 
+parent就是当前线程，可见启动的线程的daemon和priority是
+继承了下来
+this.daemon = parent.isDaemon();
+this.priority = parent.getPriority();
+可见，不光线程优先级具有继承性，守护线程或者非守护线程也是具有继承性(main是非守护线程，
+因此所有创建的线程默认都是非守护线程)
+例子:
+package chapter01.section10.thread_1_10_1.project_1_t18;
+
+public class MyThread1 extends Thread {
+	@Override
+	public void run() {
+		System.out.println("MyThread1 run priority=" 
+				+ this.getPriority() + " " + Thread.currentThread().getName());
+		MyThread2 thread2 = new MyThread2();
+		thread2.start();
+	}
+}
+
+
+package chapter01.section10.thread_1_10_1.project_1_t18;
+
+public class MyThread2 extends Thread{
+	@Override
+	public void run() {
+		System.out.println("MyThread2 run priority=" 
+				+ this.getPriority() + " " + Thread.currentThread().getName());
+	}
+}
+
+
+package chapter01.section10.thread_1_10_1.project_1_t18;
+
+public class Run {
+	public static void main(String[] args) {
+		System.out.println("main thread begin priority="
+				+ Thread.currentThread().getPriority());
+		//Thread.currentThread().setPriority(6);
+		System.out.println("main thread end priority=" 
+				+ Thread.currentThread().getPriority());
+		MyThread1 thread1 = new MyThread1();
+		thread1.start();
+	}
+}
+/*
+去掉注释之后result:
+main thread begin priority=5
+main thread end priority=6
+MyThread1 run priority=6 Thread-0
+MyThread2 run priority=6 Thread-1
+带注释之后result:
+main thread begin priority=5
+main thread end priority=5
+MyThread1 run priority=5 Thread-0
+MyThread2 run priority=5 Thread-1
+*/
+根据结果可以看到优先级确实被继承了下来
+
+
+
+6.优先级具有规则性
+通过使用setPriority()方法设置线程的优先级，可以让重要的线程任务更倾向于占用CPU资源
+eg：
+package chapter01.section10.thread_1_10_2.project_1_t19;
+
+import java.util.Random;
+
+public class MyThread1 extends Thread {
+	@Override
+	public void run() {
+		long beginTime = System.currentTimeMillis();
+		long addResult = 0;
+		for(int j = 0; j < 10; j++) {
+			for(int i = 0; i < 50000; i++) {
+				Random random = new Random();
+				random.nextInt();
+				addResult = addResult + i;
+			}
+		}
+		long endTime = System.currentTimeMillis();
+		System.out.println("*****thread1 use time=" + (endTime - beginTime));
+	}
+}
+
+
+package chapter01.section10.thread_1_10_2.project_1_t19;
+
+import java.util.Random;
+
+public class MyThread2 extends Thread {
+	@Override
+	public void run() {
+		long beginTime = System.currentTimeMillis();
+		long addResult = 0;
+		for(int j = 0; j < 10; j++) {
+			for(int i = 0; i < 50000; i++) {
+				Random random = new Random();
+				random.nextInt();
+				addResult = addResult + i;
+			}
+		}
+		long endTime = System.currentTimeMillis();
+		System.out.println("-----thread2 use time=" + (endTime - beginTime));
+	}
+}
+
+
+package chapter01.section10.thread_1_10_2.project_1_t19;
+
+public class Run {
+	public static void main(String[] args) {
+		for(int i = 0; i < 5; i++) {
+			MyThread1 thread1 = new MyThread1();
+			thread1.setPriority(1);
+			thread1.start();
+			
+			MyThread2 thread2 = new MyThread2();
+			thread2.setPriority(1);
+			//thread2.setPriority(10);
+			thread2.start();
+		}
+	}
+}
+/*
+带上注释result:
+-----thread2 use time=496
+-----thread2 use time=506
+-----thread2 use time=535
+*****thread1 use time=535
+*****thread1 use time=557
+*****thread1 use time=568
+*****thread1 use time=569
+-----thread2 use time=570
+*****thread1 use time=575
+-----thread2 use time=574
+去掉注释result:
+-----thread2 use time=301
+-----thread2 use time=393
+-----thread2 use time=426
+-----thread2 use time=439
+-----thread2 use time=484
+*****thread1 use time=509
+*****thread1 use time=522
+*****thread1 use time=522
+*****thread1 use time=534
+*****thread1 use time=535
+*/
+结果分析:
+可以发现，高优先级的线程总是大部分先执行完，当线程优先级的等级距离差距很大
+时，谁先执行完和代码的调用顺序无关，即CPU尽量将执行资源让给优先级比较高的线程
+
+
+
+7.java线程中有两种线程，一种是用户线程(非守护线程), 另一种就是守护线程(Daemon)
+用户线程:
+	用户线程有时称为前台线程。我们在写程序时，把一些耗时的处理从主线程里面拿出来，
+放到单独的一个线程里面去执行，以免阻止主线程的运行，造成界面处于一种无响应状态，
+无法进行其他操作，这样的用户体验非常不好。一般我们在程序里面创建的线程都是用户线程，
+它们为程序所用，这些线程都必须正常的运行到结束，或者按照要求终止。
+
+守护线程:
+	守护线程有时称为后台线程。我们在程序里面一般很少创建后台线程，它一般由JVM创建，
+默默的运行在后台，为系统或我们的程序提供一些服务。比如，定时检测对象的使用情况，
+计算一些对象的引用，在必要的时候执行一些对象的销毁和资源的回收。我们的程序一般不用去管它
+	它的特性有陪伴的含义，当进程中不存在非守护线程了，则守护线程自动销毁。也就是
+说守护线程是给用户线程服务的。典型的守护线程就是垃圾回收线程(GC)。当进程中没有非
+守护线程了，则垃圾回收线程也没有存在的必要了，自动销毁。
+设置方法:
+	任何线程都可以设置为守护线程和用户线程，通过方法Thread.setDaemon(bool 
+on);true则把该线程设置为守护线程，反之则为用户线程。Thread.setDaemon()必须在
+Thread.start()之前调用，否则运行时会抛出异常。
+
+注:
+	我们在Java中创建线程时，这个线程在默认的情况下是一个用户线程，并且如果这个线程在运行,
+那么JVM就不会终结这个应用。和用户线程不同，当一个线程被标记为守护线程的时候，JVM在用户线程
+结束的时候，是不会持续等待守护线程结束的，而是直接结束程序，并且结束程序中相关的守护线程。
+
+
+eg:
+package chapter01.section11.project_1_daemonThread;
+
+public class MyThread extends Thread{
+	private int i = 0;
+	
+	@Override
+	public void run() {
+		try {
+			while(true) {
+				i++;
+				System.out.println("i=" + i);
+				Thread.sleep(1000);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter01.section11.project_1_daemonThread;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread thread = new MyThread();
+			thread.setDaemon(true); //设置为守护线程
+			thread.start();
+			Thread.sleep(5000);
+			System.out.println("我离开thread对象也不再打印了，也就是停止了!");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+i=1
+i=2
+i=3
+i=4
+i=5
+我离开thread对象也不再打印了，也就是停止了!
+ */
+结果分析:
+可以看到主线程main执行结束，没有了用户线程，那么thread守护线程也就结束了
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

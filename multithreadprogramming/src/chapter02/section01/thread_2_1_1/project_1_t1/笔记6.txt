@@ -1,0 +1,59 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+详细代码见:https://github.com/youaresherlock/multithreadingforjavanotes
+
+Why are Thread.stop, Thread.suspend and Thread.resume
+Deprecated?英文文档翻译
+通过阅读一篇文档来重新体会Thread类中的stop()、suspend()、resume()方法过时的原因
+我的jdk版本是9.0.4,所以翻译的文章是9给出的，文章内容其实差别不大
+java9和java11分别如下文章地址如下: 
+https://docs.oracle.com/javase/9/docs/api/java/lang/doc-files/threadPrimitiveDeprecation.html
+https://docs.oracle.com/en/java/javase/11/docs/api/java.base/java/lang/doc-files/threadPrimitiveDeprecation.html
+
+英汉如下:
+Java Thread Primitive Deprecation
+Why is Thread.stop deprecated?
+Because it is inherently unsafe. Stopping a thread causes it to unlock all the monitors 
+that it has locked. (The monitors are unlocked as the ThreadDeath exception propagates
+up the stack.) If any of the objects previously protected by these monitors were in an 
+inconsistent state, other threads may now view these objects in an inconsistent state. 
+Such objects are said to be damaged. When threads operate on damaged objects, arbitrary 
+behavior can result. This behavior may be subtle and difficult to detect, or it may be 
+pronounced. Unlike other unchecked exceptions, ThreadDeath kills threads silently; thus, 
+the user has no warning that his program may be corrupted. The corruption can manifest 
+itself at any time after the actual damage occurs, even hours or days in the future.
+Java线程类Thread原始弃用
+为什么Thread.stop方法被弃用?
+因为它本质上是不安全的。停止一个线程导致它会释放所有已锁定的监视器。(当ThreadDeath
+异常在堆栈中传播时，监视器将被解锁。)如果先前受这些监视器保护的对象处于不一致状态，
+则其他线程则其他线程现在可能会以不一致的状态查看这些对象。这些对象就被破坏了。当线程
+对被破坏的对象进行操作时，会产生任意的行为。这种行为可能很微妙并且难以检测，或者很明
+显。不同于其他的非检查异常，ThreadDeath异常悄无声息地杀死线程；因此，用户在自己的程
+序可能被破坏情况下没有被警告。在实际破坏发生之后，程序被破坏的现象可能发生在任何时候，
+甚至是未来的几个小时或几天内能够体现。
+
+Couldn't I just catch the ThreadDeath exception and fix the damaged object?
+In theory, perhaps, but it would vastly complicate the task of writing correct 
+multithreaded code. The task would be nearly insurmountable for two reasons:
+
+	1.A thread can throw a ThreadDeath exception almost anywhere. All synchronized 
+methods and blocks would have to be studied in great detail, with this in mind.
+	2.A thread can throw a second ThreadDeath exception while cleaning up from the 
+first (in the catch or finally clause). Cleanup would have to be repeated till 
+it succeeded. The code to ensure this would be quite complex.
+
+In sum, it just isn't practical.
+难道我不能捕获ThreadDeath异常并修复损坏的对象吗?
+理论上来说，或许可以，但是完成写出正确的多线程代码是极其复杂的。这项任务几乎无法克服，
+原因有两点:
+	1.一个线程几乎可以在任何地方抛出一个ThreadDeath异常。所有同步的方法和同步语句块
+必须非常详细地研究，考虑到这一点。
+	2.当位于catch或finally子句中的第一个清理一个线程可以抛出第二个ThreadDeath异常。
+清理将不得不重复，直到成功。确保这一点的代码是相当复杂的。
