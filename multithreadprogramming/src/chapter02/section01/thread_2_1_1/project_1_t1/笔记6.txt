@@ -39,6 +39,8 @@ Java线程类Thread原始弃用
 序可能被破坏情况下没有被警告。在实际破坏发生之后，程序被破坏的现象可能发生在任何时候，
 甚至是未来的几个小时或几天内能够体现。
 
+
+
 Couldn't I just catch the ThreadDeath exception and fix the damaged object?
 In theory, perhaps, but it would vastly complicate the task of writing correct 
 multithreaded code. The task would be nearly insurmountable for two reasons:
@@ -57,3 +59,252 @@ In sum, it just isn't practical.
 必须非常详细地研究，考虑到这一点。
 	2.当位于catch或finally子句中的第一个清理一个线程可以抛出第二个ThreadDeath异常。
 清理将不得不重复，直到成功。确保这一点的代码是相当复杂的。
+总而言之，这种做法是不切实际的。
+
+
+
+What about Thread.stop(Throwable)?
+In addition to all of the problems noted above, this method may be used to generate 
+exceptions that its target thread is unprepared to handle (including checked 
+exceptions that the thread could not possibly throw, were it not for this method). 
+For example, the following method is behaviorally identical to Java's throw operation, 
+but circumvents the compiler's attempts to guarantee that the calling method has 
+declared all of the checked exceptions that it may throw:
+static void sneakyThrow(Throwable t) {
+    Thread.currentThread().stop(t);
+}
+那么关于Thread.stop(Throwable obj)呢?
+除了上面提到的所有问题，这个方法还可以用来生成其目标线程没有准备处理的异常。(如果不是
+这个方法的话，包括当前线程不可能抛出的检查异常)
+举个例子，下面的方法在行为上与java的trow操作相同，但是规避了编译器尝试来保证所调用的
+方法声明了它可能会抛出的所有检查异常
+
+
+
+What should I use instead of Thread.stop?
+Most uses of stop should be replaced by code that simply modifies some variable 
+to indicate that the target thread should stop running. The target thread should 
+check this variable regularly, and return from its run method in an orderly fashion 
+if the variable indicates that it is to stop running. To ensure prompt communication 
+of the stop-request, the variable must be volatile (or access to the variable 
+must be synchronized).
+
+For example, suppose your applet contains the following start, stop and run methods:
+我应当用什么来替代Thread.stop()方法呢？
+大多数停止的使用应该被替换为只是简单的修改一些变量来指示目标线程应该停止运行的代码。目
+标线程应该定期检查此变量，如果变量表示它将要停止运行，则要以有序方式从目标线程的run()
+方法中返回。为了保证停止请求的及时通信，变量必须是volatile(或者对变量的访问必须是同步的)
+
+例如，假设你的应用包含下面的启动、停止和运行方法。
+private Thread blinker;
+
+public void start() {
+    blinker = new Thread(this);
+    blinker.start();
+}
+
+public void stop() {
+    blinker.stop();  // UNSAFE! 可以看到这种方法不安全
+}
+
+public void run() {
+    while (true) {
+        try {
+            Thread.sleep(interval);
+        } catch (InterruptedException e){
+        }
+        repaint();
+    }
+}
+You can avoid the use of Thread.stop by replacing the applet's stop and run methods with:
+你可以通过一下方式替换应用的stop和run法来避免使用Thread.stop方法
+private volatile Thread blinker;
+
+public void stop() {
+    blinker = null;
+}
+
+public void run() {
+    Thread thisThread = Thread.currentThread();
+    while (blinker == thisThread) {
+        try {
+            Thread.sleep(interval);
+        } catch (InterruptedException e){
+        }
+        repaint();
+    }
+}
+上面的处理方式是存在问题的，如果当线程处于非运行状态的时候(当sleep方法被调用或者当wait
+方法被调用或者被IO阻塞的)，上面的方法是不可以使用。此时可以使用interrupt方法来打破阻塞
+的情况，当interrupt方法来打破阻塞的情况，当interrupt被调用的时候，会抛出Inetrrupted
+Exception异常，可以通过在run方法中捕获这个异常来让线程安全退出
+
+
+
+How do I stop a thread that waits for long periods (e.g., for input)?
+That's what the Thread.interrupt method is for. The same "state based" 
+signaling mechanism shown above can be used, but the state change (blinker = null
+, in the previous example) can be followed by a call to Thread.interrupt, 
+to interrupt the wait:
+
+public void stop() {
+    Thread moribund = waiter;
+    waiter = null;
+    moribund.interrupt();
+}
+
+For this technique to work, it's critical that any method that catches an interrupt 
+exception and is not prepared to deal with it immediately reasserts the exception. 
+We say reasserts rather than rethrows, because it is not always possible to rethrow 
+the exception. If the method that catches the InterruptedException is not declared 
+to throw this (checked) exception, then it should "reinterrupt itself" with the 
+following incantation:
+    Thread.currentThread().interrupt();
+This ensures that the Thread will reraise the InterruptedException as soon as it is able.
+我如何停止一个需要等待很长时间的线程(例如，等待输入)?
+这就是Thread.interrupt方法的用途，可以使用相同的如上所示的"基于状态"的信号机制，但是状
+态的改变只有可以调用interrupt方法来中断等待:
+要使这种技术起作用，任何捕获InterruptedException的异常是至关重要的，并且没有准备好立刻
+处理这个异常。我们说重新主张而不是重新抛出，因为并不总是可能重新抛出异常。如果捕获InterrupedException
+异常的方法没有声明抛出这个检查异常，那么它应该用下面的方法重新中断它自己:
+	Thread.currentThread().interrupt();
+这个确保线程在允许的情况下立刻触发InterruptedException异常。
+
+
+
+What if a thread doesn't respond to Thread.interrupt?
+In some cases, you can use application specific tricks. For example, if a thread is 
+waiting on a known socket, you can close the socket to cause the thread to return 
+immediately. Unfortunately, there really isn't any technique that works in general. 
+It should be noted that in all situations where a waiting thread doesn't respond to 
+Thread.interrupt, it wouldn't respond to Thread.stop either. Such cases include 
+deliberate denial-of-service attacks, and I/O operations for which thread.stop and 
+thread.interrupt do not work properly.
+如果一个线程没有响应Thread.interrupt方法怎么办?
+在某些情况下，你可使用特定的技巧。例如，如果一个线程是在已知的套接字上等待，可以关闭套接
+字来使得线程立刻返回。 不幸的是， 在一般情况下并没有任何有效的技术。需要注意的是，在一个
+等待线程对Thread.interrupt方法没有响应的所有情况下，它也不会响应Thread.stop方法。这种
+情况下，包括故意的拒绝服务攻击，和I/O操作，thread.stop和thread.interrupt方法不能正确
+地工作。
+
+
+
+Why are Thread.suspend and Thread.resume deprecated?
+Thread.suspend is inherently deadlock-prone. If the target thread holds a lock on 
+the monitor protecting a critical system resource when it is suspended, no thread 
+can access this resource until the target thread is resumed. If the thread that 
+would resume the target thread attempts to lock this monitor prior to calling resume, 
+deadlock results. Such deadlocks typically manifest themselves as "frozen" processes.
+为什么Thread.suspend和Thread.resume方法被淘汰?
+Thread.suspend方法在本质上是容易死锁的。当目标线程调用了Thread.suspend方法，如果它在监视器上
+拥有一个锁来保护重要的系统资源，那么直到目标线程调用Thread.resume方法，没有线程可以访问这个资
+源。如果将调用resume方法来恢复目标线程的这个线程尝试在调用Thread.resume方法之前锁定这个监视器
+，会造成死锁。这种死锁通常表现为"冻结"进程。
+
+
+
+What should I use instead of Thread.suspend and Thread.resume?
+
+As with Thread.stop, the prudent approach is to have the "target thread" poll a variable 
+indicating the desired state of the thread (active or suspended). When the desired state 
+is suspended, the thread waits using Object.wait. When the thread is resumed, the target 
+thread is notified using Object.notify.
+我应该用什么代替Thread.suspend和Thread.resume方法?
+
+正如Thread.stop方法一样，谨慎的方法是让"目标线程"轮询一个变量，这个变量指示期望的线程状态(活动
+状态(也就是运行状态)或挂起状态)。当所需的状态是挂起状态的时候，线程使用Object.wait方法来等待.(
+超类Object方法中定义了wait()方法和notify以及notifyAll()方法，其他的对象都继承了这个方法, 另外
+wait方法当前线程会释放锁)。当所线程恢复时，使用Object.notify方法来通知线程。
+
+For example, suppose your applet contains the following mousePressed event handler, which 
+toggles the state of a thread called blinker:
+举个例子，假设你的应用程序包含了鼠标按下事件的处理程序，它切换名为bliker的线程的状态:
+private boolean threadSuspended; //这个就是线程挂起和恢复的flag
+
+Public void mousePressed(MouseEvent e) {
+    e.consume();
+
+    if (threadSuspended)
+        blinker.resume(); 
+    else
+        blinker.suspend();  // DEADLOCK-PRONE!
+
+    threadSuspended = !threadSuspended;
+}
+You can avoid the use of Thread.suspend and Thread.resume by replacing the event handler above with:
+你可以通过用下面的替换事件处理器来避免使用Thread.suspend和Thread.resume方法
+public synchronized void mousePressed(MouseEvent e) {
+    e.consume();
+
+    threadSuspended = !threadSuspended;
+
+    if (!threadSuspended)
+        notify();
+}
+and adding the following code to the "run loop":
+并且在run()方法中加入下面的代码:
+synchronized(this) {
+    while (threadSuspended)
+        wait();
+}
+The wait method throws the InterruptedException, so it must be inside a try ... catch 
+clause. It's fine to put it in the same clause as the sleep. The check should follow 
+(rather than precede) the sleep so the window is immediately repainted when the thread 
+is "resumed." The resulting run method follows:
+wait()方法会抛出InterruptedException异常，因此它必须包含在try-catch语句块中。把它和sleep()方
+法放在通过一个语句块里是可以的。检查应该在sleep()方法调用之后(而不是之前),以便于线程被恢复时窗口
+立即重绘。示例的run()方法代码如下:
+
+public void run() {
+    while (true) {
+        try {
+            Thread.sleep(interval);
+
+            synchronized(this) {
+                while (threadSuspended)
+                    wait();
+            }
+        } catch (InterruptedException e){
+        }
+        repaint();
+    }
+}
+Note that the notify in the mousePressed method and the wait in the run method are 
+inside synchronized blocks. This is required by the language, and ensures that wait 
+and notify are properly serialized. In practical terms, this eliminates race conditions 
+that could cause the "suspended" thread to miss a notify and remain suspended indefinitely.
+While the cost of synchronization in Java is decreasing as the platform matures, it 
+will never be free. A simple trick can be used to remove the synchronization that 
+we've added to each iteration of the "run loop." The synchronized block that was 
+added is replaced by a slightly more complex piece of code that enters a synchronized 
+block only if the thread has actually been suspended:
+注意: mousePressed方法中的notify方法和run方法中的wait方法是在sychronized块中.这是
+语言所需要的，并且确保wait和notify被正确序列化。实际上，这消除了竞态条件，而这种竞态
+条件可能导致"挂起"线程错过通知并无限期地挂起。尽管随着平台的成熟，Java中同步成本正在
+不断下降，但永远不会没有开销。可以使用一个简单的技巧来移除同步，我们可以添加run方法的
+每个迭代。被添加的同步块被一个稍微复杂一点的的代码所替代，仅仅当线程实际上已经挂起时才
+进入同步的代码块。
+In the absence of explicit synchronization, threadSuspended must be made volatile to 
+ensure prompt communication of the suspend-request.
+
+The resulting run method is:
+在没有显示同步的情况下，必须用volatile关键字修饰threadSuspended变量来确保suspend-request的
+及时沟通。
+private volatile boolean threadSuspended;
+
+public void run() {
+    while (true) {
+        try {
+            Thread.sleep(interval);
+
+            if (threadSuspended) {
+                synchronized(this) {
+                    while (threadSuspended)
+                        wait();
+                }
+            }
+        } catch (InterruptedException e){
+        }
+        repaint();
+    }
+}
