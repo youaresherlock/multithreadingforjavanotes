@@ -308,3 +308,77 @@ public void run() {
         repaint();
     }
 }
+
+
+
+Can I combine the two techniques to produce a thread that may be safely "stopped" 
+or "suspended"? 
+我可以将这两种技术结合起来，产生一个安全的"停止的"或"挂起的"线程吗?
+Yes, it's reasonably straightforward. The one subtlety is that the target thread 
+may already be suspended at the time that another thread tries to stop it. If the 
+stop method merely sets the state variable (blinker) to null, the target thread 
+will remain suspended (waiting on the monitor), rather than exiting gracefully 
+as it should. If the applet is restarted, multiple threads could end up waiting 
+on the monitor at the same time, resulting in erratic behavior.
+To rectify this situation, the stop method must ensure that the target thread resumes 
+immediately if it is suspended. Once the target thread resumes, it must recognize 
+immediately that it has been stopped, and exit gracefully. Here's how the resulting 
+run and stop methods look:
+是的，它实现是很简单的。一个微妙之处在于目标线程在当另一个线程试图停止它时可能已经被挂起。
+如果stop()方法仅仅将变量blinker的状态设置为null,目标线程将保持挂起(等待监视器)，而不是
+当它可以的时候优雅的退出。如果应用重新启动，多个线程可能同时停止等待监视器，导致不稳定的
+行为。为了纠正这种情况，自定义的stop()方法应该确保当目标线程被挂起，它能立刻恢复。一旦目标
+线程恢复，它必须立刻识别到并停止优雅地退出。下面是定义的run和stop方法:
+public void run() {
+    Thread thisThread = Thread.currentThread();
+    while (blinker == thisThread) {
+        try {
+            Thread.sleep(interval);
+
+            synchronized(this) {
+                while (threadSuspended && blinker==thisThread)
+                    wait();
+            }
+        } catch (InterruptedException e){
+        }
+        repaint();
+    }
+}
+
+public synchronized void stop() {
+    blinker = null;
+    notify();
+}
+If the stop method calls Thread.interrupt, as described above, it needn't call 
+notify as well, but it still must be synchronized. This ensures that the target 
+thread won't miss an interrupt due to a race condition.
+正如前面描述的那样，如果自定义stop()方法调用Thread.interrupt()方法,则不需要调用notify
+()方法，但它仍然必须同步。这就保证了目标线程不会因为竞争条件而错过中断。
+
+
+
+What about Thread.destroy?
+
+Thread.destroy was never implemented and has been deprecated. If it were implemented,
+it would be deadlock-prone in the manner of Thread.suspend. (In fact, it is roughly 
+equivalent to Thread.suspend without the possibility of a subsequent Thread.resume.)
+对于Thread.destroy方法呢?
+Thread.destroy从未被实现，现在已经被废弃了。如果它被实现，它很容易造成死锁。(事实上，在没有后续
+线程挂起的情况下，粗略与Thread.suspend方法相同)
+
+
+
+Why is Runtime.runFinalizersOnExit deprecated?
+
+Because it is inherently unsafe. It may result in finalizers being called on live objects 
+while other threads are concurrently manipulating those objects, resulting in erratic 
+behavior or deadlock. While this problem could be prevented if the class whose objects 
+are being finalized were coded to "defend against" this call, most programmers do not 
+defend against it. They assume that an object is dead at the time that its finalizer is called.
+Further, the call is not "thread-safe" in the sense that it sets a VM-global flag. This 
+forces every class with a finalizer to defend against the finalization of live objects!
+为什么Runtime.runFinalizersOnExit被废弃?
+因为它本质上是不安全的。它会导致对活动对象调用终结器。当其他线程并发操作这些对象的时候，会导致不
+稳定或者死锁。然而，如果实力对象被终结的类被编码为"防御"这个调用，这个问题可以被避免。大多数程序
+员没有抵御它。他们假设在调用终止程序时对象已经死亡。此外，从设置VM-全局标志的意义上说，调用不是
+"线程安全的"。这强制每个类使用终结器来防御活动对象的终结!
