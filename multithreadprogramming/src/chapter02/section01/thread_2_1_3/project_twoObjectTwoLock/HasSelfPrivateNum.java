@@ -1,9 +1,10 @@
-package chapter02.section01.thread_2_1_1.project_1_t1;
+package chapter02.section01.thread_2_1_3.project_twoObjectTwoLock;
 
 public class HasSelfPrivateNum {
-	public void addI(String username) {
+	private int num = 0;
+	
+	synchronized public void addI(String username) {
 		try {
-			int num = 0; 
 			if(username.equals("a")) {
 				num = 100;
 				System.out.println("a set over!");

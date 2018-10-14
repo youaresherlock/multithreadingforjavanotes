@@ -1,4 +1,4 @@
-package chapter02.section01.thread_2_1_1.project_1_t1;
+package chapter02.section01.thread_2_1_2.project_1_t2;
 
 public class ThreadB extends Thread{
 	
