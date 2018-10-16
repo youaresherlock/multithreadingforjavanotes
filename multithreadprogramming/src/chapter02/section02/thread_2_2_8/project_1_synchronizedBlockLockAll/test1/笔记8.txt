@@ -1,0 +1,1082 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+
+6) 细化验证3个结论
+"synchronized(非this对象x)"格式的写法是将x对象本身作为"对象监视器"，这样就可以
+得出以下3个结论:
+1: 当多个线程同时执行synchronized(x){}同步代码块时呈同步效果
+2: 当其他线程执行x对象中synchronized同步方法时呈同步效果
+3: 当其他线程执行x对象方法里面的synchronized(this)代码块时呈同步效果
+
+验证第一个结论:
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test1;
+
+public class MyObject {
+
+}
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test1;
+
+public class Service {
+	
+	public void testMethod1(MyObject object) {
+		synchronized(object) {
+			try {
+				System.out.println("testMethod1 ___getLock time="
+						+ System.currentTimeMillis() + " run ThreadName="
+						+ Thread.currentThread().getName());
+				Thread.sleep(2000);
+				System.out.println("testMethod1 releaseLock time="
+						+ System.currentTimeMillis() + " run ThreadName="
+						+ Thread.currentThread().getName());
+			} catch (InterruptedException e) {
+				// TODO: handle exception
+				e.printStackTrace();
+			}
+		}
+	}
+}
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test1;
+
+public class ThreadA extends Thread{
+	private Service service;
+	private MyObject object;
+	
+	public ThreadA(Service service, MyObject object) {
+		super();
+		this.service = service;
+		this.object = object;
+	}
+	
+	
+	@Override
+	public void run() {
+		super.run();
+		service.testMethod1(object);
+	}	
+}
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test1;
+
+public class ThreadB extends Thread{
+	private Service service;
+	private MyObject object;
+	
+	public ThreadB(Service service, MyObject object) {
+		super();
+		this.service = service;
+		this.object = object;
+	}
+	
+	
+	@Override
+	public void run() {
+		super.run();
+		service.testMethod1(object);
+	}	
+}
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test1;
+
+public class Run1_1 {
+	public static void main(String[] args) {
+		Service service = new Service();
+		MyObject object = new MyObject();
+		
+		ThreadA a = new ThreadA(service, object);
+		a.setName("a");
+		a.start();
+		
+		ThreadB b = new ThreadB(service, object);
+		b.setName("b");
+		b.start();
+	}
+}
+/*
+result:
+testMethod1 ___getLock time=1539676986180 run ThreadName=a
+testMethod1 releaseLock time=1539676988180 run ThreadName=a
+testMethod1 ___getLock time=1539676988180 run ThreadName=b
+testMethod1 releaseLock time=1539676990180 run ThreadName=b
+同步的原因是使用了同一个"对象监视器".
+*/
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test1;
+
+public class Run1_2 {
+	public static void main(String[] args) {
+		Service service = new Service();
+		MyObject object1 = new MyObject();
+		MyObject object2 = new MyObject();
+		
+		ThreadA a = new ThreadA(service, object1);
+		a.setName("a");
+		a.start();
+		
+		ThreadB b = new ThreadB(service, object2);
+		b.setName("b");
+		b.start();
+	}
+}
+/*
+使用不同的"对象监视器"的result:
+testMethod1 ___getLock time=1539677091933 run ThreadName=a
+testMethod1 ___getLock time=1539677091933 run ThreadName=b
+testMethod1 releaseLock time=1539677093934 run ThreadName=a
+testMethod1 releaseLock time=1539677093934 run ThreadName=b
+*/
+
+
+验证第二个结论和第三个结论:
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test2;
+
+public class MyObject {
+	synchronized public void speedPrintString() {
+//	public void speedPrintString() {
+//		synchronized(this) {
+		System.out.println("speedPrintString __getLock time="
+				+ System.currentTimeMillis() + " run ThreadName="
+				+ Thread.currentThread().getName());
+		System.out.println("----------------------");
+		System.out.println("speedPrintString releaseLock time="
+				+ System.currentTimeMillis() + " run ThreadName="
+				+ Thread.currentThread().getName());
+//		}
+	}
+}
+
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test2;
+
+public class Service {
+	
+	public void testMethod1(MyObject object) {
+		synchronized(object) {
+			try {
+				System.out.println("testMethod1 ___getLock time="
+						+ System.currentTimeMillis() + " run ThreadName="
+						+ Thread.currentThread().getName());
+				Thread.sleep(5000);
+				System.out.println("testMethod1 releaseLock time="
+						+ System.currentTimeMillis() + " run ThreadName="
+						+ Thread.currentThread().getName());
+			} catch (InterruptedException e) {
+				// TODO: handle exception
+				e.printStackTrace();
+			}
+		}
+	}
+}
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test2;
+
+public class ThreadA extends Thread{
+	private MyObject object;
+	private Service service;
+	
+	public ThreadA(Service service, MyObject object) {
+		super();
+		this.service = service;
+		this.object = object;
+	}
+	
+	
+	@Override
+	public void run() {
+		super.run();
+		service.testMethod1(object);
+	}	
+}
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test2;
+
+public class ThreadB extends Thread{
+	private MyObject object;
+	
+	public ThreadB(MyObject object) {
+		super();
+		this.object = object;
+	}
+	
+	
+	@Override
+	public void run() {
+		super.run();
+		object.speedPrintString();
+	}	
+}
+
+
+package chapter02.section02.thread_2_2_8.project_1_synchronizedBlockLockAll.test2;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException {
+		Service service = new Service();
+		MyObject object = new MyObject();
+		
+		ThreadA a = new ThreadA(service, object);
+		a.setName("a");
+		a.start();
+		
+		Thread.sleep(100);
+		
+		ThreadB b = new ThreadB(object);
+		b.setName("b");
+		b.start();	
+	}
+}
+/*
+不去掉注释result:
+testMethod1 ___getLock time=1539679985913 run ThreadName=a
+testMethod1 releaseLock time=1539679990916 run ThreadName=a
+speedPrintString __getLock time=1539679990916 run ThreadName=b
+----------------------
+speedPrintString releaseLock time=1539679990916 run ThreadName=b
+去掉注释，改成synchronized(this)代码块可以看到结果是同步效果
+result:
+testMethod1 ___getLock time=1539683725343 run ThreadName=a
+testMethod1 releaseLock time=1539683730343 run ThreadName=a
+speedPrintString __getLock time=1539683730343 run ThreadName=b
+----------------------
+speedPrintString releaseLock time=1539683730344 run ThreadName=b
+*/
+
+
+
+7) 静态同步synchronized方法与synchronized(class)代码块
+关键字synchronized还可以应用在static静态方法上，如果这样写，那是对当前的
+*.java文件对应的Class类进行持锁。
+举个例子:
+package chapter02.section02.thread_2_2_9.project_1_synStaticMethod;
+
+public class Service {
+	
+	synchronized public static void printA() {
+		try {
+			System.out.println("线程名称为: " + Thread.currentThread().getName()
+					+ "在" + System.currentTimeMillis() + "进入printA");
+			Thread.sleep(3000);
+			System.out.println("线程名称为: " + Thread.currentThread().getName()
+					+ "在" + System.currentTimeMillis() + "离开printA");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+	
+	synchronized public static void printB() {
+		System.out.println("线程名称为: " + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "进入printB");
+		System.out.println("线程名称为: " + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "离开printB");
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_1_synStaticMethod;
+
+public class ThreadA extends Thread{
+	@Override
+	public void run() {
+		Service.printA();
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_1_synStaticMethod;
+
+public class ThreadB extends Thread {
+	@Override
+	public void run() {
+		Service.printB();
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_1_synStaticMethod;
+
+public class Run {
+	public static void main(String[] args) {
+		ThreadA a = new ThreadA();
+		a.setName("A");
+		a.start();
+		
+		ThreadB b = new ThreadB();
+		b.setName("B");
+		b.start();
+	}
+}
+/*
+result:
+线程名称为: A在1539688152259进入printA
+线程名称为: A在1539688155259离开printA
+线程名称为: B在1539688155259进入printB
+线程名称为: B在1539688155259离开printB
+ */
+结果分析:
+运行结果是同步运行,synchronized关键字加到static静态方法上是给Class类上锁。
+
+
+验证synchronized同步方法和synchronized静态方法不是给同一个对象上锁。
+package chapter02.section02.thread_2_2_9.project_2_synTwoLock;
+
+public class Service {
+	
+	synchronized public static void printA() {
+		try {
+			System.out.println("线程名称为: " + Thread.currentThread().getName()
+					+ "在" + System.currentTimeMillis() + "进入printA");
+			Thread.sleep(3000);
+			System.out.println("线程名称为: " + Thread.currentThread().getName()
+					+ "在" + System.currentTimeMillis() + "离开printA");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+	
+	synchronized public static void printB() {
+		System.out.println("线程名称为：" + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "进入printB");
+		System.out.println("线程名称为：" + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "离开printB");
+	}
+	
+	synchronized public void printC() {
+		System.out.println("线程名称为：" + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "进入printC");
+		System.out.println("线程名称为：" + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "离开printC");
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_2_synTwoLock;
+
+public class ThreadA extends Thread{
+	private Service service;
+	
+	public ThreadA(Service service) {
+		super();
+		this.service =service;
+	}
+	
+	@Override
+	public void run() {
+		service.printA();
+	}
+	
+}
+
+
+package chapter02.section02.thread_2_2_9.project_2_synTwoLock;
+
+public class ThreadB extends Thread{
+	
+	private Service service;
+	
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.printB();
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_2_synTwoLock;
+
+public class Run {
+	public static void main(String[] args) {
+		
+		Service service = new Service();
+		
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		a.start();
+		
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		b.start();
+		
+		ThreadC c = new ThreadC(service);
+		c.setName("C");
+		c.start();
+	}
+}
+/*
+result:
+线程名称为: A在1539689461825进入printA
+线程名称为：C在1539689461826进入printC
+线程名称为：C在1539689461826离开printC
+线程名称为: A在1539689464825离开printA
+线程名称为：B在1539689464825进入printB
+线程名称为：B在1539689464825离开printB
+*/
+结果分析: 
+可以看到AC线程是异步执行，AB线程是同步执行
+异步的原因是持有不同的锁，一个是对象锁，另一个是Class锁。
+
+
+
+验证: Class锁可以对类的所有对象实例起作用 
+package chapter02.section02.thread_2_2_9.project_3_synMoreObjectStaticOneLock;
+
+public class Service {
+
+//	synchronized public static void printA() {
+	public static void printA() {
+		synchronized (Service.class) {
+		try {
+			System.out.println("线程名称为：" + Thread.currentThread().getName()
+					+ "在" + System.currentTimeMillis() + "进入printA");
+			Thread.sleep(3000);
+			System.out.println("线程名称为：" + Thread.currentThread().getName()
+					+ "在" + System.currentTimeMillis() + "离开printA");
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+ }
+	
+//	synchronized public void printB() {
+	public static void printB() {
+		synchronized (Service.class) {
+		System.out.println("线程名称为：" + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "进入printB");
+		System.out.println("线程名称为：" + Thread.currentThread().getName() + "在"
+				+ System.currentTimeMillis() + "离开printB");
+		}
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_3_synMoreObjectStaticOneLock;
+
+public class ThreadA extends Thread {
+	private Service service;
+
+	public ThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.printA();
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_3_synMoreObjectStaticOneLock;
+
+
+public class ThreadB extends Thread {
+	private Service service;
+
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.printB();
+	}
+}
+
+
+package chapter02.section02.thread_2_2_9.project_3_synMoreObjectStaticOneLock;
+
+public class Run {
+	public static void main(String[] args) {
+
+		Service service1 = new Service();
+		Service service2 = new Service();
+
+		ThreadA a = new ThreadA(service1);
+		a.setName("A");
+		a.start();
+
+		ThreadB b = new ThreadB(service2);
+		b.setName("B");
+		b.start();
+	}
+}
+/*
+result:
+线程名称为：A在1539690179686进入printA
+线程名称为：A在1539690182687离开printA
+线程名称为：B在1539690182687进入printB
+线程名称为：B在1539690182687离开printB
+*/
+结果分析: 
+虽然是不同对象但静态的同步方法还是同步运行
+同步synchronized(class)代码块的作用其实和synchronized static方法的作用一样。
+
+
+3. 数据类型String的常量池特性
+在JVM中具有String常量池缓存的功能，将synchronized(string)同步快与String联合
+时，要注意常量池带来的一些意外。
+package chapter02.section02.thread_2_2_10.project_1_StringAndSyn;
+
+public class Service {
+	public static void print(String stringParam) {
+		try {
+			synchronized(stringParam) {
+				while(true) {
+					System.out.println(Thread.currentThread().getName());
+					Thread.sleep(1000);
+				}
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter02.section02.thread_2_2_10.project_1_StringAndSyn;
+
+public class ThreadA extends Thread {
+	private Service service;
+	public ThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.print("AA");
+	}
+}
+
+
+package chapter02.section02.thread_2_2_10.project_1_StringAndSyn;
+
+public class ThreadB extends Thread {
+	private Service service;
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.print("AA");
+	}
+}
+
+
+package chapter02.section02.thread_2_2_10.project_1_StringAndSyn;
+
+public class Run {
+	public static void main(String[] args) {
+
+		Service service = new Service();
+
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		a.start();
+
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		b.start();
+	}
+}
+/*
+result:
+..........
+A
+A
+A
+A
+A
+A
+..........
+ */
+ 结果分析:
+ Sting的两个值都是AA，两个线程持有相同的锁，所以造成B线程不能执行。这是因为String常量池带来的问题。
+ 因此在大多数情况下，同步synchronized代码块都不使用String作为锁对象，而改用其他，例如new Object()
+ 实例化一个Object对象，但它并不放入缓存中。
+
+
+4. 同步synchronized方法无限等待与解决 
+同步方法容易造成死循环
+package chapter02.section02.thread_2_2_11.project_1_twoStop;
+
+public class Service {
+	synchronized public void methodA() {
+//	public void methodA() {
+//		Object object1 = new Object();
+//		synchronized(object1) {
+			System.out.println("methodA begin");
+			boolean isContinueRun = true;
+			while(isContinueRun) {
+			}
+			System.out.println("methodA end");
+//		}
+	}
+	
+	synchronized public void methodB() {
+//	public void methodB() {
+//		Object object2 = new Object();
+//		synchronized(object2) {
+			System.out.println("methodB begin");
+			System.out.println("methodB   end");
+//		}
+	}
+}
+
+
+package chapter02.section02.thread_2_2_11.project_1_twoStop;
+
+public class ThreadA extends Thread{
+	private Service service;
+	
+	public ThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.methodA();
+	}
+}
+
+
+package chapter02.section02.thread_2_2_11.project_1_twoStop;
+
+public class ThreadB extends Thread{
+	private Service service;
+	
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.methodB();
+	}
+}
+
+
+package chapter02.section02.thread_2_2_11.project_1_twoStop;
+
+public class Run {
+	public static void main(String[] args) {
+		Service service = new Service();
+
+		ThreadA athread = new ThreadA(service);
+		athread.start();
+
+		ThreadB bthread = new ThreadB(service);
+		bthread.start();
+	}
+}
+/*
+带上注释线程B永远得不到运行的机会，锁死了:
+methodA begin 
+不带上注释不在出现同步等待的情况: 
+methodA begin
+methodB begin
+methodB   end
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
