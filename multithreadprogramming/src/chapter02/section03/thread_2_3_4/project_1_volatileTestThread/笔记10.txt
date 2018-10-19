@@ -1,0 +1,680 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+
+
+4. volatile关键字
+	volatile关键字的主要作用是使变量在多个线程间可见,它强制从公共堆栈中取得
+变量的值，而不是从线程私有数据栈中取得变量的值
+(1) 关键字volatile与死循环
+package chapter02.section03.thread_2_3_1.project_1_t99;
+
+public class PrintString {
+	
+	private boolean isContinuePrint = true;
+	
+	public boolean isContinuePrint() {
+		return isContinuePrint;
+	}
+	
+	public void setContinuePrint(boolean isContinuePrint) {
+		this.isContinuePrint = isContinuePrint;
+	}
+	
+	public void printStringMethod() {
+		try {
+			while(isContinuePrint == true) {
+				System.out.println("run printStringMethod threadName="
+						+ Thread.currentThread().getName());
+				Thread.sleep(1000);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+	
+}
+
+
+package chapter02.section03.thread_2_3_1.project_1_t99;
+
+public class Run {
+	public static void main(String[] args) {
+		PrintString printStringService = new PrintString();
+		printStringService.printStringMethod();
+		System.out.println("我要停止它! stopThread="
+				+ Thread.currentThread().getName());
+		printStringService.setContinuePrint(false);
+		}
+}
+/*
+result:
+run printStringMethod threadName=main
+run printStringMethod threadName=main
+run printStringMethod threadName=main
+run printStringMethod threadName=main
+run printStringMethod threadName=main
+.....................................
+*/
+结果分析:
+停止不下来原因主要是main线程一直在处理while()循环，导致程序不能执行后面的代
+码，可以使用多线程方法解决
+
+
+
+(2) 解决同步死循环
+package chapter02.section03.thread_2_3_1.project_1_t10;
+
+public class PrintString implements Runnable{
+	
+	private boolean isContinuePrint = true;
+	
+	public boolean isContinuePrint() {
+		return isContinuePrint;
+	}
+	
+	public void setContinuePrint(boolean isContinuePrint) {
+		this.isContinuePrint = isContinuePrint;
+	}
+	
+	public void printStringMethod() {
+		try {
+			while(isContinuePrint == true) {
+				System.out.println("run printStringMethod threadName="
+						+ Thread.currentThread().getName());
+				Thread.sleep(1000);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+
+	@Override
+	public void run() {
+		printStringMethod();
+	}
+}
+
+
+package chapter02.section03.thread_2_3_1.project_1_t10;
+
+public class Run {
+	public static void main(String[] args) {
+		PrintString printStringService = new PrintString();
+		new Thread(printStringService).start();
+		
+		System.out.println("我要停止它! stopThread="
+				+ Thread.currentThread().getName());
+		printStringService.setContinuePrint(false);
+		}
+}
+/*
+result:
+我要停止它! stopThread=main
+run printStringMethod threadName=Thread-0
+*/
+
+
+(3) 解决异步死循环
+举个例子:
+package chapter02.section03.thread_2_3_1.project_1_t16;
+
+public class RunThread extends Thread{
+	//volatile private boolean isRunning = true;
+	private boolean isRunning = true;
+	
+	public boolean isRunning() {
+		return isRunning;
+	}
+
+	public void setRunning(boolean isRunning) {
+		this.isRunning = isRunning;
+	}
+	
+	@Override
+	public void run() {
+		System.out.println("进入run了");
+		while(isRunning == true) {
+		}
+		System.out.println("线程被停止了！");
+	}
+ }
+
+
+package chapter02.section03.thread_2_3_1.project_1_t16;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			RunThread thread = new RunThread();
+			thread.start();
+			Thread.sleep(1000);
+			thread.setRunning(false);
+			System.out.println("已经赋值为false");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+进入run了
+已经赋值为false进入run了
+程序陷入死循环
+加入volatile关键字后result:
+进入run了
+已经赋值为false
+线程被停止了！
+ */
+结果分析:
+在启动RunThread.java线程时，变量private boolean isRunning = true;存在于
+公共堆栈及线程的私有堆栈中。在JVM被设置为-server模式是为了线程运行的效率，线
+程一直在私有堆栈中取得isRunning的值是true.而代码thread.setRunning(false);
+虽然被执行，更新的却是公共堆栈中的isRunning变量值false,所以一直就是出于死循
+环状态。这个问题是私有堆栈中的值和公共堆栈中的值不同步造成的。解决这样的问题就
+要使用volatile关键字，它的作用就是当线程访问isRunning这个变量时，强制性从公
+有堆栈中进行取值。
+4.png
+
+我的系统是Win10,Java 9.0.4,算是比较新了，有些公司目前还是java8,设置不设置
+JVM中参数Server服务器的环境-server,都会出现死循环，和我看的书不太一样，
+这说明解释器还是做了一些优化。
+3.png
+
+
+(4) volatile的缺点和与synchronized的异同
+缺点: 使用volatile关键字增加了实例变量在多个线程之间的可见性。但volatile关键
+字最致命的缺点是不支持原子性。
+
+volatile vs synchronized:
+1) 关键字volatile是线程同步的轻量级实现，所以volatile性能肯定比synchronized
+要好，并且volatile只能修饰于变量，而synchronized可以修饰方法，以及代码块。
+随着JDK新版本的发布，synchronized关键字在执行效率上得到很大提升，在开发中使用
+synchronized关键字的比率还是比较大的。
+2） 多线程访问volatile不会发生阻塞，而synchronized会出现阻塞
+3)  volatile能保证数据的可见性，但不能保证原子性;而synchronized可以保证原子性
+，也可以间接保证可见性，因为它会将私有内存和公有内存中的数据做同步。
+4)  关键字volatile解决的是变量在多个线程之间的可见性;而synchronized关键字解决
+的是多个线程之间访问资源的同步性
+总结: 线程安全包含原子性和可见性两个方面，Java的同步机制都是围绕这两个方面来确保
+线程安全的。
+
+
+(5) volatile非原子的特性
+关键字volatile虽然增加了实例变量在多个线程之前的可见性，但它却不具备同步性
+，那么也就不具备原子性.
+package chapter02.section03.thread_2_3_4.project_1_volatileTestThread;
+
+public class MyThread extends Thread{
+	volatile public static int count;
+//	public static int count;
+	
+//	synchronized private static void addCount() {
+	private static void addCount() {
+		for(int i = 0; i < 100; i++) {
+			count++;
+		}
+		System.out.println("count=" + count);
+	}
+	
+	@Override
+	public void run() {
+		addCount();
+	}
+}
+
+
+package chapter02.section03.thread_2_3_4.project_1_volatileTestThread;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread[] mythreadArray = new MyThread[100];
+		for(int i = 0; i < 100; i++) {
+			mythreadArray[i] = new MyThread();
+		}
+		
+		for(int i = 0; i < 100; i++) {
+			mythreadArray[i].start();
+		}
+	}
+}
+/*
+带上注释代码result:
+..........
+count=9846
+count=9746
+count=9546
+count=9446
+count=9246 不满10000
+不带注释代码result:
+..........
+count=9400
+count=9500
+count=9600
+count=9700
+count=9800
+count=9900
+count=10000
+*/
+
+关键字volatile主要使用的场合是在多个线程中可以感知
+实例变量被更改了，并且可以获得最新的值使用，
+也就是用多线程读取共享变量时可以获得最新值使用。volatile提示线程每次从共享
+内存中读取变量，而不是从私有内从中读取，这样就保证了同步数据的可见性。
+
+i++是非原子操作:
+1) 从内存中取出i的值
+2) 计算i的值
+3) 将i的值写到内存中
+假如在第2步计算值的时候，另外一个线程也修改i的值，那么这个时候就会出现脏数
+据。解决的办法是使用synchronized关键字。volatile本身不处理数据的原子性，而
+是强制对数据的读写及时影响到主内存的。
+
+使用关键字volatile时出现非线程安全的原因.
+下图是变量在内存中工作的过程图:
+5.png
+
+Java内存模型: 描述程序中各变量（实例域、静态域和数组元素）之间的关系，以及
+在实际计算机系统中将变量存储到内存和从内存取出变量这样的低层细节。
+
+在不同的平台，内存模型是不一样的，但是jvm的内存模型规范是统一的。其实java的
+多线程并发问题最终都会反映在java的内存模型上，所谓线程安全无非是要控制多个
+线程对某个资源的有序访问或修改。总结java的内存模型，要解决两个主要的问题：
+可见性和有序性。
+
+一个线程可以执行的操作有：使用（use）、赋值（assign）、装载（load）、存储
+（store）、锁定（lock）、解锁（unlock），而从主内存可以执行的操作有：读（
+read）、写（write）、锁定（lock）、解锁（unlock），每一个操作都是原子的。
+
+可见性：多个线程之间是不能互相传递数据通信的，它们之间的沟通只能通过共享变
+量来进行。Java内存模型（JMM）规定了jvm有主内存，主内存是多个线程共享的。当
+new一个对象的时候，也是被分配在主内存中，每个线程都有自己的工作内存，工作
+内存存储了主存的某些对象的副本，当然线程的工作内存大小是有限制的。当线程操
+作某个对象时，执行顺序如下：
+1) read和load阶段: 从主存赋值变量到当前线程工作内存
+2) use和assgin阶段: 执行代码，改变共享变量值
+3) store和write阶段: 用工作内存数据刷新主存对应变量的值
+JVM规范定义了线程对主存的操作指令：read，load，use，assign，store，write。
+当一个共享变量在多个线程的工作内存中都有副本时，如果一个线程修改了这个共享变
+量，那么其他线程应该能够看到这个被修改后的值，这就是多线程的可见性问题。
+
+有序性：通过Java提供的同步机制或volatile关键字，来保证内存的访问顺序。
+
+原子性: 原子操作是不能分割的整体，没有其他线程能够中断或检查正在原子操作中的
+变量。一个原子类型(atomic)就是一个原子操作可用的类型，它可以在没有锁的情况下
+做到线程安全(thread-safe)
+
+线程在引用变量时不能直接从主内存中引用，如果线程工作内存中没有该变量，则会从
+主内存中拷贝一个副本到工作内存中，这个过程为read-load，完成后线程会引用该副本
+。当同一线程再度引用该字段时，有可能重新从主存中获取变量副本（read-load-use），
+也有可能直接引用原来的副本（use），也就是说 read,load,use顺序可以由JVM实现系
+统决定。
+线程不能直接为主存中中字段赋值，它会将值指定给工作内存中的变量副本（assign），
+完成后这个变量副本会同步到主存储区（store - write），至于何时同步过去，根据
+JVM实现系统决定
+
+在多线程环境中,use和assign是多次出现的，但这一操作并不是原子性的，也就是在
+read和load之后，如果主内存count变量发生修改之后，线程工作内存中的值由于已
+经加载，不会产生对应的变化，也就是私有内存和公有内存中的变量不同步，所以计
+算出来的结果和预期不一样，也就出现了非线程安全问题。
+volatile无法保证load-use-asign三步的整个的原子性，因此解决的是变量读时的
+可见性问题，但无法保证原子性，对于多个线程访问同一个实例变量还是需要加锁同步。
+
+
+(5) 使用原子类进行++操作
+除了在++操作时使用synchronized关键字实现同步外，还可以使用AtomicInteger
+原子类进行实现:
+AtomicInteger官方文档:
+public class AtomicInteger
+extends Number
+implements Serializable
+An int value that may be updated atomically. See the VarHandle specification for 
+descriptions of the properties of atomic accesses. An AtomicInteger is used in 
+applications such as atomically incremented counters, and cannot be used as a 
+replacement for an Integer. However, this class does extend Number to allow 
+uniform access by tools and utilities that deal with numerically-based classes.
+可以原子性更新的int值。有关原子访问属性的描述，请参阅VarHandle类规范。AtomicInteger可以在类似原子递增计数器等应用
+程序中使用，不能用作Integer的替代。但是，这个类确实扩展了Number类来允许用基于数字的类工具来统一访问。
+
+addAndGet方法
+public final int addAndGet​(int delta)
+Atomically adds the given value to the current value, with memory effects as specified by VarHandle.getAndAdd(java.lang.Object...).
+原子性的将给定值添加到当前值
+Parameters:
+delta - the value to add
+Returns:
+the updated value
+
+incrementAndGet方法
+public final int incrementAndGet​()
+Atomically increments the current value, with memory effects as specified by VarHandle.getAndAdd(java.lang.Object...).
+原子性的增加当前值
+Equivalent to addAndGet(1).
+
+Returns:
+the updated value
+
+
+举例:
+package chapter02.section03.thread_2_3_5.project_1_AtomicIntegerTest;
+import java.util.concurrent.atomic.AtomicInteger;
+
+public class AddCountThread extends Thread{
+	private AtomicInteger count = new AtomicInteger(0);
+	
+	@Override
+	public void run() {
+		for(int i = 0; i < 10000; i ++) {
+			System.out.println(count.incrementAndGet());
+		}
+	}
+}
+
+
+package chapter02.section03.thread_2_3_5.project_1_AtomicIntegerTest;
+
+public class Run {
+	public static void main(String[] args) {
+		AddCountThread countService = new AddCountThread();
+		
+		Thread t1= new Thread(countService);
+		t1.start();
+		
+		Thread t2 = new Thread(countService);
+		t2.start();
+		
+		Thread t3 = new Thread(countService);
+		t3.start();
+		
+		Thread t4 = new Thread(countService);
+		t4.start();
+
+		Thread t5 = new Thread(countService);
+		t5.start();
+	}
+}
+/*
+result:
+.....
+49996
+49997
+49998
+49999
+50000
+*/
+可以看到成功加到了5000
+
+
+(6) 原子类也不完全安全
+原子类在具有逻辑性的情况下输出结果也具有随机性
+package chapter02.section03.thread_2_3_6.project_1_atomicIntegerNoSafe;
+
+import java.util.concurrent.atomic.AtomicLong;
+
+public class MyService {
+	
+	public static AtomicLong aiRef = new AtomicLong();
+	
+	public void addNum() {
+//	synchronized public void addNum() {
+		System.out.println(Thread.currentThread().getName() + "加了100之后的值是:"
+				+ aiRef.addAndGet(100));
+		aiRef.addAndGet(1);
+	}
+}
+
+
+package chapter02.section03.thread_2_3_6.project_1_atomicIntegerNoSafe;
+
+public class MyThread extends Thread{
+	private MyService myService;
+	
+	public MyThread(MyService myService) {
+		super();
+		this.myService = myService;
+	}
+	
+	@Override
+	public void run() {
+		myService.addNum();
+	}
+}
+
+
+package chapter02.section03.thread_2_3_6.project_1_atomicIntegerNoSafe;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyService service = new MyService();
+			
+			MyThread[] array = new MyThread[5];
+			for(int i = 0; i < array.length; i++) {
+				array[i] = new MyThread(service);
+			}
+			
+			for(int i = 0; i < array.length; i++) {
+				array[i].start();
+			}
+			
+			Thread.sleep(1000);
+			System.out.println(service.aiRef.get());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+/*
+同步方法addNum()后result:
+Thread-1加了100之后的值是:100
+Thread-3加了100之后的值是:201
+Thread-4加了100之后的值是:302
+Thread-2加了100之后的值是:403
+Thread-0加了100之后的值是:504
+505
+不同步方法addNum()后result:
+Thread-1加了100之后的值是:100
+Thread-2加了100之后的值是:300
+Thread-4加了100之后的值是:500
+Thread-3加了100之后的值是:400
+Thread-0加了100之后的值是:200
+505
+ */
+结果分析:
+打印顺序出错，应该每次加1次100再加1次1，虽然addAndGet()方法是原子的，但
+是方法和方法之间的调用却不是原子的，我们只需要同步一下
+
+
+(7) synchronized代码块有volatile同步的功能
+关键字synchronized可以使多个线程访问同一个资源具有同步性，而且它还具有将
+线程工作内存中的变量与公共内存中的变量同步的功能
+package chapter02.section03.thread_2_3_7.project_1_synchronizedUpdateNewValue;
+
+public class Service {
+	
+	private boolean isContinueRun = true;
+	
+	public void runMethod() {
+//		String anyString = new String();
+		while(isContinueRun == true) {
+//			synchronized(anyString) {
+//				
+//			}
+		}
+		System.out.println("停下来了!");
+	}
+	
+	public void stopMethod() {
+		isContinueRun = false;
+	}
+}
+
+
+package chapter02.section03.thread_2_3_7.project_1_synchronizedUpdateNewValue;
+
+public class ThreadA extends Thread{
+	private Service service;
+	
+	public ThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.runMethod();
+	}
+}
+
+
+package chapter02.section03.thread_2_3_7.project_1_synchronizedUpdateNewValue;
+
+public class ThreadB extends Thread{
+private Service service;
+	
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.stopMethod();
+	}
+}
+
+
+package chapter02.section03.thread_2_3_7.project_1_synchronizedUpdateNewValue;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		try {
+			Service service = new Service();
+
+			ThreadA a = new ThreadA(service);
+			a.start();
+
+			Thread.sleep(1000);
+
+			ThreadB b = new ThreadB(service);
+			b.start();
+
+			System.out.println("已经发起停止的命令了！");
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+/*
+带上注释result:
+已经发起停止的命令了！
+死循环了，得到这个结果是各线程间的数据值没有可视性造成的，而关键字synchr
+onized可以具有可视性
+去掉注释result:
+已经发起停止的命令了！
+停下来了!
+*/
+注: 关键字synchronized可以保证在同一时刻，只有一个线程可以执行某一个方法
+或某一个代码块。它包含两个特征: 互斥性和可见性。同步synchronized不仅可以解
+决一个线程看到对象处于不一致的状态，还可以保证进入同步方法或者同步代码块的
+每个线程，都看到由同一个锁保护之前所有的修改效果。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
