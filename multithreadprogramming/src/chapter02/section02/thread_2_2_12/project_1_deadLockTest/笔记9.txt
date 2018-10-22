@@ -203,8 +203,6 @@ usernameValue passwordValue
 ageValue addressValue
 */
 
-
-举例: 
 静态内部类:
 	静态内部类可以使用public，protected，private修饰.静态内部类中可以定义静
 态和非静态的成员

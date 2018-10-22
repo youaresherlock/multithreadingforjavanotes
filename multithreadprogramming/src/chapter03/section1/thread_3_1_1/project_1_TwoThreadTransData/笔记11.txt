@@ -1,0 +1,219 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+
+
+线程间通信
+线程是操作系统中独立的个体，使线程间进行通信后，系统之间的交互性会更强大，在大大提高
+CPU利用率的同时还会使程序员对各线程任务在处理的过程中进行有效的把控和监督。
+重点掌握以下几个内容:
+(1) 使用wait/notify机制实现线程间的通信
+(2) 生产者/消费者模式的实现
+(3) 方法join的使用
+(4) ThreadLocal类的使用
+
+1.等待/通知机制
+
+(1) 不使用等待/通知机制实现线程间通信
+在实验中使用sleep()结合while(true)死循环法来实现多个线程间通信。其实就是拿一个队列来实现
+
+package chapter03.section1.thread_3_1_1.project_1_TwoThreadTransData;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MyList {
+	
+	private List<String> list = new ArrayList<>();
+	
+	public void add() {
+		list.add("Clarence");
+	}
+	
+	public int size() {
+		return list.size();
+	}
+}
+
+
+package chapter03.section1.thread_3_1_1.project_1_TwoThreadTransData;
+
+public class ThreadA extends Thread{
+	
+	private MyList list;
+	
+	public ThreadA(MyList list) {
+		super();
+		this.list = list;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			for(int i = 0; i < 10; i++) {
+				list.add();
+				System.out.println("添加了" + (i + 1) + "个元素");
+				Thread.sleep(1000);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_1.project_1_TwoThreadTransData;
+
+public class ThreadB extends Thread{
+
+	private MyList list;
+	
+	public ThreadB(MyList list) {
+		super();
+		this.list = list;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			while (true) {
+				System.out.println(list.size());
+				//疑问?为什么没有上面的语句就轮询检测不到list.size大小了
+				if (list.size() == 5) {
+					System.out.println("==5了，线程b要退出了！");
+					throw new InterruptedException();
+				}
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_1.project_1_TwoThreadTransData;
+
+public class Test {
+
+	public static void main(String[] args) {
+		MyList service = new MyList();
+
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		a.start();
+
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		b.start();
+
+	}
+}
+/*
+result:
+.............
+添加了5个元素
+==5了，线程b要退出了！
+java.lang.InterruptedException
+	at chapter03.section1.thread_3_1_1.project_1_TwoThreadTransData.ThreadB.run(ThreadB.java:20)
+添加了6个元素
+添加了7个元素
+添加了8个元素
+添加了9个元素
+添加了10个元素
+*/
+可以看到是通过线程B不断轮询队列的大小来达到通讯的目的。
+
+注:
+虽然两个线程间实现了通信，但有一个弊端就是,线程ThreadB.java不停地通过while语句轮
+询机制来检测某一个条件，这样会浪费CPU资源。如果轮询的时间间隔很小，更浪费CPU资源;
+如果轮询的时间间隔很大，有可能会取不到想要得到的数据。所以就需要有一种机制来讲减少
+CPU的资源浪费，而且还可以实现在多个线程间通信，它就是"wait/notify"机制
+
+大家在学习硬件方面的知识应该知道CPU轮询检测引脚高低电平状态或者收到中断请求来转到
+中断服务程序,在这里简单介绍一下.
+中断的基本概念:
+	程序中断通常简称中断,是指CPU在正常运行程序的过程中，由于预选安排或发生了各种
+随机的内部或外部事件(根据中断源的不同，所以把中断分为硬件中断和软件中断两大类，而
+如硬件中断又可分为外部中断和内部中断，外部中断一般是指计算机外设发出的中断请求;内部
+中断是指因硬件出错或运算出错所引起的中断)，使CPU中断正在运行的程序，而转到为相应
+的服务程序去处理(有一个中断程序表可以查询)，这个过程称为程序中断。
+轮询的基本概念:
+	轮询(Polling)I/O方式或程序控制I/O方式，是让CPU以一定的周期按次序查询每一个外设，
+看它是否有数据输入或输出的要求，若有，则进行相应的输入/输出服务;若无,或I/O处理完毕，
+CPU就接着查询下一个外设。
+
+
+(2) wait/notify机制概述
+java的wait/nofity的通知机制可以用来实现线程间通信，wait表示线程的等待，调用该方法
+会导致线程阻塞，直至另一线程调用notify或notifyAll方法才可令其继续执行。
+多个线程共同访问同一个变量起到通信作用，但那种通信机制不是"等待/通知"，两个线程完全是
+主动式地读取一个共享变量，在花费读取时间的基础上，读到的值不是想要的，并不能完全确定。
+
+
+(3) 等待/通知机制的实现
+wait方法:
+	wait()的作用是使当前执行代码的线程进行等待，wait()方法是Object类的方法，该方法用来
+将当前线程置入"预执行队列"中，并且在wait()所在的代码行处停止执行，直到接到通知或被中断
+为止。在调用wait()之前，线程必须获得该对象的对象级别锁，即只能在同步方法或同步块中调用
+wait()方法。在执行wait()方法后，当前线程释放锁。在从wait()返回前，线程与其他线程竞争重新
+获得锁。如果调用wait()时，没有持有适当的锁，则抛出IllegalMonitorStateException
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
