@@ -21,7 +21,8 @@ CPU利用率的同时还会使程序员对各线程任务在处理的过程中�
 1.等待/通知机制
 
 (1) 不使用等待/通知机制实现线程间通信
-在实验中使用sleep()结合while(true)死循环法来实现多个线程间通信。其实就是拿一个队列来实现
+在实验中使用sleep()结合while(true)死循环法来实现多个线程间通信。其实就是拿一个队列
+来实现
 
 package chapter03.section1.thread_3_1_1.project_1_TwoThreadTransData;
 
@@ -159,11 +160,699 @@ java的wait/nofity的通知机制可以用来实现线程间通信，wait表示�
 
 (3) 等待/通知机制的实现
 wait方法:
-	wait()的作用是使当前执行代码的线程进行等待，wait()方法是Object类的方法，该方法用来
-将当前线程置入"预执行队列"中，并且在wait()所在的代码行处停止执行，直到接到通知或被中断
-为止。在调用wait()之前，线程必须获得该对象的对象级别锁，即只能在同步方法或同步块中调用
-wait()方法。在执行wait()方法后，当前线程释放锁。在从wait()返回前，线程与其他线程竞争重新
-获得锁。如果调用wait()时，没有持有适当的锁，则抛出IllegalMonitorStateException
+	wait()的作用是使当前执行代码的线程进行等待，wait()方法是Object类的方法，该方法
+用来将当前线程置入"预执行队列"中，并且在wait()所在的代码行处停止执行，直到接到通知
+或被中断为止。在调用wait()之前，线程必须获得该对象的对象级别锁，即只能在同步方法或
+同步块中调用wait()方法。在执行wait()方法后，当前线程释放锁。在从wait()返回前，线程
+与其他线程竞争重新获得锁。如果调用wait()时，没有持有适当的锁，则抛出IllegalMonitor
+StateException
+notify方法:
+	方法notify()也要在同步方法或同步块中调用，即在调用前，线程也必须获得该对象的对
+象级别锁。如果没有调用notify()时没有持有适当的锁，也会抛出IllegalMonitorStateExcep
+tion.该方法用来通知那些可能等待该对象的对象锁的其他线程，如果有多个线程等待，则由线
+程规划器随机挑选出其中一个呈wait状态的线程，对其发出nofity通知，并使它等待获取该对
+象的对象锁。需要说明的是，在执行notify()方法后，当前线程不会马上释放该对象锁，呈wait
+状态的线程也并不能马上获取该对象锁，要等待执行notify()方法的线程将程序执行完，也就是
+说出synchronized代码块后，当前线程才会释放锁，而呈wait状态所在的线程才可以获取该对象
+锁。当第一个获得了该对象锁的wait线程运行完毕以后，它会释放掉该对象锁，此时如果该对象
+没有再次使用notify语句，则即便该对象已经空闲，其他wait状态等待的线程由于没有得到该
+对象的通知，还会继续阻塞在wait状态，直到这个对象发出一个notify或notifyAll.
+总之: wait使线程停止执行，而notify使停止的线程继续运行。
+
+
+
+举个例子:
+package chapter03.section1.thread_3_1_3.project_1_test1;
+
+public class Test1 {
+	public static void main(String[] args) {
+		try {
+			String newString = new String("");
+			newString.wait();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+Exception in thread "main" java.lang.IllegalMonitorStateException
+	at java.base/java.lang.Object.wait(Native Method)
+	at java.base/java.lang.Object.wait(Unknown Source)
+	at chapter03.section1.thread_3_1_3.project_1_test1.Test1.main(Test1.java:7)
+*/
+结果分析:
+可以看到没有在同步方法或同步块中调用wait()方法，抛出IllegalMonitorStateException异常
+
+
+package chapter03.section1.thread_3_1_3.project_1_test1;
+
+public class Test2 {
+	public static void main(String[] args) {
+		try {
+			String lock = new String();
+			System.out.println("syn上面");
+			synchronized(lock) {
+				System.out.println("syn第一行");
+				lock.wait();
+				System.out.println("wait下的代码!");
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+syn上面
+syn第一行
+*/
+结果分析:
+可以看到main线程始终得不到唤醒，阻塞在wait()方法
+
+
+下面我们看wait/notify如何配合起来使用
+举个例子:
+package chapter03.section1.thread_3_1_3.project_2_test2;
+
+public class MyThread1 extends Thread{
+	private Object lock;
+	
+	public MyThread1(Object lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			synchronized (lock) {
+				System.out.println("开始    wait time=" + System.currentTimeMillis());
+				lock.wait();
+				System.out.println("结束    wait time=" + System.currentTimeMillis());
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_3.project_2_test2;
+
+public class MyThread2 extends Thread{
+	private Object lock;
+	
+	public MyThread2(Object lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	@Override
+	public void run() {
+		synchronized(lock) {
+			System.out.println("开始notify time=" + System.currentTimeMillis());
+			lock.notify();
+			System.out.println("结束notify time=" + System.currentTimeMillis());
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_3.project_2_test2;
+
+public class Test {
+	public static void main(String[] args) {
+		try {
+			Object lock = new Object();
+			
+			MyThread1 t1 = new MyThread1(lock);
+			t1.start();
+			
+			Thread.sleep(3000);
+			
+			MyThread2 t2 = new MyThread2(lock);
+			t2.start();
+			
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+开始    wait time=1540272811455
+开始notify time=1540272814462
+结束notify time=1540272814462
+结束    wait time=1540272814462
+*/
+结果分析:
+可以看到3秒后线程被notify通知唤醒，线程B执行run结束释放lock对象锁，线程A获得锁继续
+执行。
+
+
+利用等待通知实现前面线程之间的通信
+举个例子:
+package chapter03.section1.thread_3_1_3.project_3_wait_notify_size5;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MyList {
+	
+	private static List<String> list = new ArrayList<>();
+	
+	public static void add() {
+		list.add("anyString");
+	}
+	
+	public static int size() {
+		return list.size();
+	}
+}
+
+
+package chapter03.section1.thread_3_1_3.project_3_wait_notify_size5;
+
+public class ThreadA extends Thread {
+	
+	private Object lock;
+	
+	public ThreadA(Object lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			synchronized(lock) {
+				if(MyList.size() != 5) {
+					System.out.println("wait begin " 
+							+ System.currentTimeMillis());
+					lock.wait();
+					System.out.println("wait end " 
+							+ System.currentTimeMillis());
+				}
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_3.project_3_wait_notify_size5;
+
+public class ThreadB extends Thread {
+	
+	private Object lock;
+	
+	public ThreadB(Object lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			synchronized(lock) {
+				for(int i = 0; i < 10; i++) {
+					MyList.add();
+					if(MyList.size() == 5) {
+						lock.notify();
+						System.out.println("已发出通知!");
+					}
+					System.out.println("添加了" + (i + 1) + "个元素!");
+					Thread.sleep(1000);
+				}
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_3.project_3_wait_notify_size5;
+
+public class Run {
+	 public static void main(String[] args) {
+		try {
+			Object lock = new Object();
+			
+			ThreadA a = new ThreadA(lock);
+			a.start();
+			
+			Thread.sleep(50);
+			
+			ThreadB b = new ThreadB(lock);
+			b.start();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+wait begin 1540274044982
+添加了1个元素!
+添加了2个元素!
+添加了3个元素!
+添加了4个元素!
+已发出通知!
+添加了5个元素!
+添加了6个元素!
+添加了7个元素!
+添加了8个元素!
+添加了9个元素!
+添加了10个元素!
+wait end 1540274055097
+*/
+结果分析:
+日志信息wait end在最后输出，这也说明notify()方法执行后并不立即释放锁。
+
+
+(4) wait/notify方法文档阅读
+我们将简单阅读Thread类中的wait()、notify()、wait(long)、notifyAll()文档
+1) wait()
+public final void wait​()
+                throws InterruptedException
+Causes the current thread to wait until another thread invokes the notify() 
+method or the notifyAll() method for this object. In other words, this method
+behaves exactly as if it simply performs the call wait(0).
+The current thread must own this object's monitor. The thread releases ownership
+of this monitor and waits until another thread notifies threads waiting on this
+object's monitor to wake up either through a call to the notify method or the 
+notifyAll method. The thread then waits until it can re-obtain ownership of 
+the monitor and resumes execution.
+wait方法将导致当前线程等待，直到另一个线程调用notify()方法或者此对象的notifyAll()方法
+换言之，这个方法就与简单调用wait(0)一样的作用。
+当前线程必须拥有此对象的监视器，当前线程释放监视器的所有权并且等待直到另一个线程通过调用
+notify方法或notifyAll方法通知正在等待这个对象监视器的线程。然后线程等待，直到它可以重新获得
+监视器的所有权并恢复执行。
+在一个参数版本中，中断和虚假唤醒是有可能的，并且这个方法wait应该总被使用在循环中:
+
+As in the one argument version, interrupts and spurious wakeups are possible, 
+and this method should always be used in a loop:
+在一个参数版本中，中断和虚假唤醒是有可能的，并且这个方法wait应该总被使用在循环中:
+
+synchronized (obj) {
+ while (<condition does not hold>)
+     obj.wait();
+ ... // Perform action appropriate to condition
+}
+ 
+This method should only be called by a thread that is the owner of this object's 
+monitor. See the notify method for a description of the ways in which a thread 
+can become the owner of a monitor.
+这个方法应该由拥有对象监视器的线程调用.有关线程成为监视器所有者的方式的描述，请参阅notify
+方法。
+Throws:
+IllegalMonitorStateException - if the current thread is not the owner of the object's 
+monitor.
+InterruptedException - if any thread interrupted the current thread before or while 
+the current thread was waiting for a notification. The interrupted status of the
+current thread is cleared when this exception is thrown.
+抛出的异常:
+IllegalMonitorStateException - 如果当前线程没有拥有对象监视器，调用wait方法抛出
+InterruptedException - 如果有任何线程在之前或当当前线程正在等待通知的时候中断当前线程。当
+这个异常被抛出的时候当前线程的中断标记被清除
+
+
+2) wait(long)
+public final void wait​(long timeout)
+                throws InterruptedException
+Causes the current thread to wait until either another thread invokes the notify()
+method or the notifyAll() method for this object, or a specified amount of time 
+has elapsed.
+The current thread must own this object's monitor.
+此方法造成当前线程等待阻塞，直到另一个线程在同一对象监视器上调用notify()或notifyAll()方法，
+或者已经过了指定的时间timeout.当前线程必须拥有这个对象的监视器才能调用wait(long)
+
+This method causes the current thread (call it T) to place itself in the wait set 
+for this object and then to relinquish any and all synchronization claims on this 
+object. Thread T becomes disabled for thread scheduling purposes and lies dormant 
+until one of four things happens:
+此方法使当前线程(T)将自己放置在该对象的阻塞队列中，然后放弃对该对象的所有的同步声明。线程T
+为线程调度器目的被禁用，并且处于休眠状态，直到发生以下四种情况之一:
+
+Some other thread invokes the notify method for this object and thread T happens to 
+be arbitrarily chosen as the thread to be awakened.
+Some other thread invokes the notifyAll method for this object.
+Some other thread interrupts thread T.
+The specified amount of real time has elapsed, more or less. If timeout is zero, however, 
+then real time is not taken into consideration and the thread simply waits until notified.
+The thread T is then removed from the wait set for this object and re-enabled for thread 
+scheduling. It then competes in the usual manner with other threads for the right to 
+synchronize on the object; once it has gained control of the object, all its synchronization 
+claims on the object are restored to the status quo ante - that is, to the situation as 
+of the time that the wait method was invoked. Thread T then returns from the invocation 
+of the wait method. Thus, on return from the wait method, the synchronization state of 
+the object and of thread T is exactly as it was when the wait method was invoked.
+A thread can also wake up without being notified, interrupted, or timing out, a so-called 
+spurious wakeup. While this will rarely occur in practice, applications must guard against 
+it by testing for the condition that should have caused the thread to be awakened, and 
+continuing to wait if the condition is not satisfied. In other words, waits should always 
+occur in loops, like this one:
+其他一些线程调用此对象的notify方法，而线程T碰巧被线程规划器任意选择为要唤醒的线程。
+其他一些线程调用这个对象的notifyAll方法
+其他一些线程中断了线程T
+指定的实时时间已经超过了，或多或少。如果timeout是0,然而，则不考虑实时，线程只是等待被通知。
+然后，线程T从此对象的阻塞序列中移出，并重新能够参与到线程调度中。然后，它以通常的方式与其他线程
+竞争对象的同步权；一旦它获得了对对象的控制，它对对象的所有同步声明都恢复到以前的状态--也就是说
+，恢复到调用wait方法时的状态。然后，线程T从wait方法的调用中返回。因此，从wait方法返回时，对象
+和线程T的同步状态与调用wait方法时完全相同。
+线程也可以在没有被通知、中断或超时的情况下醒来，这就是所谓的虚假唤醒。虽然在实践中很少发生这种情况，
+但应用程序必须通过测试可能造成线程被唤醒的条件来监控它，并在条件不满足时继续等待来防止这种情况的
+发生。换言之，等待应该总是以循环的形式出现，比如下面这个:
+
+     synchronized (obj) {
+         while (<condition does not hold>)
+             obj.wait(timeout);
+         ... // Perform action appropriate to condition
+     }
+ 
+(For more information on this topic, see section 14.2, Condition Queues, in Brian Goetz 
+and others' "Java Concurrency in Practice" (Addison-Wesley, 2006) or Item 69 in Joshua 
+Bloch's "Effective Java (Second Edition)" (Addison-Wesley, 2008).
+If the current thread is interrupted by any thread before or while it is waiting, then 
+an InterruptedException is thrown. This exception is not thrown until the lock status 
+of this object has been restored as described above.
+如果当前线程在等待之前或等待期间被任何线程中断，则抛出InterruptedException异常。直到按照上面
+描述的那样恢复了该对象的锁状态，否则不会引发此异常。
+
+Note that the wait method, as it places the current thread into the wait set for this 
+object, unlocks only this object; any other objects on which the current thread may be 
+synchronized remain locked while the thread waits.
+注意，当wait方法将当前线程放入这个对象的阻塞队列中时，它只会解锁这个对象。当线程等待时，当前线程
+同步持有的其他对象锁保持锁定
+
+This method should only be called by a thread that is the owner of this object's monitor. 
+See the notify method for a description of the ways in which a thread can become the
+owner of a monitor.
+该方法应该由持有此对象的监视器的线程来调用，有关线程成为监视器所有者的方式的描述，请参阅notify方法
+
+Parameters:
+timeout - the maximum time to wait in milliseconds. 最大等待时间，单位为毫秒
+Throws:
+IllegalArgumentException - if the value of timeout is negative.
+如果参数是负数抛出此异常
+IllegalMonitorStateException - if the current thread is not the owner of the object's monitor.
+如果当前线程不是拥有此对象的监视器
+InterruptedException - if any thread interrupted the current thread before or while the
+current thread was waiting for a notification. The interrupted status of the current 
+thread is cleared when this exception is thrown.
+如果任何线程在当前线程等待通知之前或之中中断它。当此异常被抛出后，当前线程的中断状态被清除
+
+
+3) notify()
+public final void notify​()
+Wakes up a single thread that is waiting on this object's monitor. If any threads are 
+waitingon this object, one of them is chosen to be awakened. The choice is arbitrary 
+and occurs at the discretion of the implementation. A thread waits on an object's 
+monitor by calling one of the wait methods.
+The awakened thread will not be able to proceed until the current thread relinquishes 
+the lock on this object. The awakened thread will compete in the usual manner with 
+any other threads that might be actively competing to synchronize on this object; 
+for example, the awakened thread enjoys no reliable privilege or disadvantage in 
+being the next thread to lock this object.
+notify方法唤醒正在等待此对象监视器的一个线程。如果有任何线程正在等待此对象，那么将任意选择其中
+之一。这个选择是任意的，由JVM实现决定。一个线程通过调用wait方法来等待这个对象监视器.在当前线程
+放弃此对象上的锁之前，唤醒的线程将无法继续执行。唤醒的线程将以通常的方式与其他正在积极竞争此同步
+此对象的线程竞争;例如，唤醒的线程在成为下一个锁定该对象的线程时不享有可靠的特权或劣势。
+
+This method should only be called by a thread that is the owner of this object's 
+monitor. A thread becomes the owner of the object's monitor in one of three ways:
+该方法只能由该对象的监视器的所有者线程调用。一个线程通过以下三种方式之一成为对象监视器的
+所有者:
+
+By executing a synchronized instance method of that object.
+通过执行该对象的synchronized的同步实例方法
+By executing the body of a synchronized statement that synchronizes on the object.
+通过执行sychronized(lock)同步语句块
+For objects of type Class, by executing a synchronized static method of that class.
+Only one thread at a time can own an object's monitor.
+对于类对象，通过执行该类的synchronized静态方法，同一时间只有一个线程可以拥有此对象监视器(类锁)
+
+Throws:
+IllegalMonitorStateException - if the current thread is not the owner of this object's monitor.
+
+4) 和notify一样，但是是唤醒所有等待此对象监视器的线程
+
+
+总结: 
+wait()方法可以使调用该方法的线程释放共享资源的锁，然后从运行状态退出，进入等待队列，
+直到被再次唤醒
+notify()方法可以随机唤醒等待队列中等待同一共享资源的"一个"线程，并使线程退出等待队
+列，进入可运行状态，也就是notify()方法仅通知"一个"线程
+notifyAll()方法可以使所有正在等待队列中等待统一共享资源的"全部"线程从等待状态退出，
+进入可运行状态。此时，优先级最高的那个线程最先执行，但也有可能是随机执行，因为这取决于
+JVM虚拟机的实现。
+每个锁对象都有两个队列，一个是就绪队列，一个是阻塞队列。就绪队列存储了将要获得锁的线程，
+阻塞队列存储了被阻塞的线程。一个线程被唤醒后，才会进入就绪队列，等待CPU的调度;反之，
+一个线程被wait后，就会进入阻塞队列，等待下一次被唤醒。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 

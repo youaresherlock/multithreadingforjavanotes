@@ -1,0 +1,433 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+
+(5) 方法wait()锁释放与notify()锁不释放
+
+验证wait()释放锁举例:
+package chapter03.section1.thread_3_1_4.project_1_waitReleaseLock;
+
+public class Service {
+	
+	public void testMethod(Object lock) {
+		try {
+			synchronized(lock) {
+				System.out.println("begin wait()");
+				lock.wait();
+				System.out.println("  end wait()");
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_4.project_1_waitReleaseLock;
+
+public class ThreadA extends Thread {
+
+	private Object lock;
+
+	public ThreadA(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.testMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_4.project_1_waitReleaseLock;
+
+public class ThreadB extends Thread {
+	private Object lock;
+
+	public ThreadB(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.testMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_4.project_1_waitReleaseLock;
+
+public class Test {
+	public static void main(String[] args) {
+
+		Object lock = new Object();
+
+		ThreadA a = new ThreadA(lock);
+		a.start();
+
+		ThreadB b = new ThreadB(lock);
+		b.start();
+	}
+}
+/*
+result:
+begin wait()
+begin wait()
+ */
+结果分析:
+wait方法自动释放锁
+
+
+验证notify()被执行后，不释放锁。
+package chapter03.section1.thread_3_1_4.project_2_notifyHoldLock;
+
+public class Service {
+	
+	public void testMethod(Object lock) {
+		try {
+			synchronized(lock) {
+				System.out.println("begin wait() ThreadName="
+						+ Thread.currentThread().getName());
+				lock.wait();
+				System.out.println("  end wait() ThreadName="
+						+ Thread.currentThread().getName());
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+	
+	public void synNotifyMethod(Object lock) {
+		try {
+			synchronized (lock) {
+				System.out.println("begin notify() ThreadName="
+						+ Thread.currentThread().getName() + " time="
+						+ System.currentTimeMillis());
+				lock.notify();
+				Thread.sleep(5000);
+				System.out.println("  end notify() ThreadName="
+						+ Thread.currentThread().getName() + " time="
+						+ System.currentTimeMillis());
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_4.project_2_notifyHoldLock;
+
+public class NotifyThread extends Thread{
+	private Object lock;
+
+	public NotifyThread(Object lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.synNotifyMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_4.project_2_notifyHoldLock;
+
+public class synNotifyMethodThread extends Thread{
+	private Object lock;
+
+	public synNotifyMethodThread(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.synNotifyMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_4.project_2_notifyHoldLock;
+
+public class ThreadA extends Thread {
+	private Object lock;
+
+	public ThreadA(Object lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	@Override
+	public void run() {
+		Service service =new Service();
+		service.testMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_4.project_2_notifyHoldLock;
+
+public class Test {
+	public static void main(String[] args) throws InterruptedException {
+
+		Object lock = new Object();
+
+		ThreadA a = new ThreadA(lock);
+		a.start();
+
+		NotifyThread notifyThread = new NotifyThread(lock);
+		notifyThread.start();
+
+		synNotifyMethodThread c = new synNotifyMethodThread(lock);
+		c.start();
+	}
+}
+/*
+result:
+begin wait() ThreadName=Thread-0
+begin notify() ThreadName=Thread-1 time=1540283462655
+  end notify() ThreadName=Thread-1 time=1540283467660
+  end wait() ThreadName=Thread-0
+begin notify() ThreadName=Thread-2 time=1540283467660
+  end notify() ThreadName=Thread-2 time=154028347266
+ */
+结果分析:
+b线程执行notify()之后执行完run方法中代码才释放锁，c才开始获得lock执行
+
+
+
+(6) 当interrupt()方法遇到wait方法
+当线程呈wait状态时，调用线程对象的interrupt方法会出现InterruptedException异常
+举个例子:
+package chapter03.section1.thread_3_1_5.project_1_waitInterruptException;
+
+public class Service {
+
+	public void testMethod(Object lock) {
+		try {
+			synchronized (lock) {
+				System.out.println("begin wait()");
+				lock.wait();
+				System.out.println("  end wait()");
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+			System.out.println("出现异常了，因为呈wait状态的线程被interrupt了！");
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_5.project_1_waitInterruptException;
+
+public class ThreadA extends Thread {
+
+	private Object lock;
+
+	public ThreadA(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.testMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_5.project_1_waitInterruptException;
+
+public class Test {
+	public static void main(String[] args) {
+
+		try {
+			Object lock = new Object();
+
+			ThreadA a = new ThreadA(lock);
+			a.start();
+
+			Thread.sleep(5000);
+
+			a.interrupt();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+begin wait()
+java.lang.InterruptedException
+出现异常了，因为呈wait状态的线程被interrupt了！
+	at java.base/java.lang.Object.wait(Native Method)
+	at java.base/java.lang.Object.wait(Unknown Source)
+	at chapter03.section1.thread_3_1_5.project_1_waitInterruptException.Service.testMethod(Service.java:9)
+	at chapter03.section1.thread_3_1_5.project_1_waitInterruptException.ThreadA.run(ThreadA.java:15)
+ */
+
+由上面的实验总结如下:
+1) 执行完同步代码块就会释放对象的锁
+2) 在执行同步代码块的过程中，遇到异常而导致线程终止，锁也会被释放
+2) 在执行同步代码块的过程中，执行了锁所属对象的wait()方法，这个线程会释放对象锁
+，而此线程对象会进入线程等待池中，等待被唤醒。
+
+
+
+(7) 只通知一个线程
+调用方法notify()一次只随机通知一个线程进行唤醒。notify多次调用可以唤醒多个线程。
+举例:
+package chapter03.section1.thread_3_1_6.project_1_notifyOne;
+
+
+public class Service {
+
+	public void testMethod(Object lock) {
+		try {
+			synchronized (lock) {
+				System.out.println("begin wait() ThreadName="
+						+ Thread.currentThread().getName());
+				lock.wait();
+				System.out.println("  end wait() ThreadName="
+						+ Thread.currentThread().getName());
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_6.project_1_notifyOne;
+
+public class ThreadA extends Thread {
+	private Object lock;
+
+	public ThreadA(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.testMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_6.project_1_notifyOne;
+
+public class ThreadB extends Thread {
+	private Object lock;
+
+	public ThreadB(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.testMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_6.project_1_notifyOne;
+
+public class ThreadC extends Thread {
+	private Object lock;
+
+	public ThreadC(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		Service service = new Service();
+		service.testMethod(lock);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_6.project_1_notifyOne;
+
+public class NotifyThread extends Thread {
+	private Object lock;
+
+	public NotifyThread(Object lock) {
+		super();
+		this.lock = lock;
+	}
+
+	@Override
+	public void run() {
+		synchronized (lock) {
+			lock.notify();
+			lock.notify();
+			lock.notify();
+			lock.notify();
+			lock.notify();
+			lock.notify();
+			lock.notify();
+			lock.notify();
+			lock.notify();
+			//可以调用lock.notifyAll()唤醒所有等待lock锁的线程
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_6.project_1_notifyOne;
+
+public class Test {
+
+	public static void main(String[] args) throws InterruptedException {
+
+		Object lock = new Object();
+
+		ThreadA a = new ThreadA(lock);
+		a.start();
+
+		ThreadB b = new ThreadB(lock);
+		b.start();
+
+		ThreadC c = new ThreadC(lock);
+		c.start();
+
+		Thread.sleep(1000);
+
+		NotifyThread notifyThread = new NotifyThread(lock);
+		notifyThread.start();
+	}
+}
+/*
+result:
+begin wait() ThreadName=Thread-0
+begin wait() ThreadName=Thread-1
+begin wait() ThreadName=Thread-2
+  end wait() ThreadName=Thread-0
+  end wait() ThreadName=Thread-2
+  end wait() ThreadName=Thread-1
+ */
