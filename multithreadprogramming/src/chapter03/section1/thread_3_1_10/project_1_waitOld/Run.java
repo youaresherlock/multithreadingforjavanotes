@@ -1,4 +1,4 @@
-package chapter03.section1.tread_3_1_10.project_1_waitOld;
+package chapter03.section1.thread_3_1_10.project_1_waitOld;
 
 import java.util.Scanner;
 

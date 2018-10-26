@@ -1,0 +1,1757 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+
+
+(2) 多个生产者和多个消费者: 操作值-假死
+"假死"现象就是线程进入WAITING等待状态。如果全部线程都进入WAITING状态，则程序就
+不在执行任何业务功能了，整个项目呈停止状态。这在使用生产者和消费者模式中经常遇到的。
+举个例子:
+package chapter03.section1.thread_3_1_11.project_2_p_c_allWait;
+
+public class ValueObject {
+	public static String value = "";
+}
+
+
+package chapter03.section1.thread_3_1_11.project_2_p_c_allWait;
+
+//生产者
+public class P {
+	
+	private String lock;
+	
+	public P(String lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	public void setValue() {
+		try {
+			synchronized(lock) {
+				while(!ValueObject.value.equals("")) {
+					System.out.println("生产者 "  
+							+ Thread.currentThread().getName() + " WAITING了*");
+					lock.wait();
+				} 
+				System.out.println("生产者 " + Thread.currentThread().getName()
+						+ " RUNNABLE了");
+				String value = System.currentTimeMillis() + "_"
+						+ System.nanoTime();
+				ValueObject.value = value;
+				lock.notify();
+//				lock.notifyAll();
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_2_p_c_allWait;
+
+//消费者
+public class C {
+	private String lock;
+	
+	public C(String lock) {
+		super();
+		this.lock = lock;
+	}
+	
+	public void getValue() {
+		try {
+			synchronized(lock) {
+				while(ValueObject.value.equals("")) {
+					//消费者等待生产者生产
+					System.out.println("消费者 " 
+							+ Thread.currentThread().getName() + " WAITING了#");
+					lock.wait();
+				}
+				System.out.println("消费者 " + Thread.currentThread().getName()
+						+ " RUNNABLE了");
+				ValueObject.value = "";
+				lock.notify();
+//				lock.notifyAll();
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_2_p_c_allWait;
+
+public class ThreadP extends Thread{
+	
+	private P p;
+	
+	public ThreadP(P p) {
+		super();
+		this.p = p;
+	}
+	
+	@Override
+	public void run() {
+		while(true) {
+			p.setValue();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_2_p_c_allWait;
+
+public class ThreadC extends Thread{
+	private C r;
+	
+	public ThreadC(C r) {
+		super();
+		this.r = r;
+	}
+	
+	@Override
+	public void run() {
+		while(true) { 
+			r.getValue();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_2_p_c_allWait;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException{
+		
+		String lock = new String("");
+		P p =new P(lock);
+		C r = new C(lock);
+		
+		ThreadP[] pThread = new ThreadP[2];
+		ThreadC[] rThread = new ThreadC[2];
+		
+		for(int i = 0; i < 2; i++) {
+			pThread[i] = new ThreadP(p);
+			pThread[i].setName("生产者" + (i + 1));
+			
+			rThread[i] = new ThreadC(r);
+			rThread[i].setName("消费者" + (i + 1));
+			
+			pThread[i].start();
+			rThread[i].start();
+		}
+		
+		Thread.sleep(5000);
+		/**
+		 * Thread.currentThread().getThreadGroup()返回当前线程的所属线程组
+		 * 当前所有线程包括main线程都属于main线程组，main线程组属于system线程组
+		 * ThreadGroup类的activeCount()方法返回当前线程组的子线程组和active线程数量
+		 * public int enumerate(Thread list[])方法用来将线程组中的内容拷贝进去
+		 */
+//		System.out.println(Thread.currentThread().getThreadGroup().getParent().getName());
+		Thread[] threadArray = new Thread[Thread.currentThread()
+		                                  .getThreadGroup().activeCount()];
+		Thread.currentThread().getThreadGroup().enumerate(threadArray);
+		
+		for(Thread thread : threadArray) {
+			System.out.println(thread.getName() + " " 
+					+ thread.getState());
+		}
+		
+	}
+}
+/*
+result:
+.......................
+消费者 消费者1 RUNNABLE了
+消费者 消费者1 WAITING了#
+消费者 消费者2 WAITING了#
+生产者 生产者2 RUNNABLE了
+生产者 生产者2 WAITING了*
+生产者 生产者1 WAITING了*
+system
+main RUNNABLE
+生产者1 WAITING
+消费者1 WAITING
+生产者2 WAITING
+消费者2 WAITING
+*/
+结果分析:
+可以看到最后所有的线程都呈假死状态。虽然使用了wait/notify通信，但不保证nofity唤醒
+的是异类，也许是同类。
+比如"生产者"唤醒"生产者",或"消费者"唤醒"消费者"这样的情况。最后会导致所有的程序都
+运行不下去。notify()唤醒是由线程调度器随机挑选出一个呈wait状态的线程，对其发出通
+知notify,并使它等待获取该对象的对象锁。
+
+
+如何解决假死问题?
+假死的原因是因为唤醒的是同类的线程，只要不光唤醒同类线程，也包括异类就可以了，因此
+将P.java和C.java中的notify()改成notifyAll()方法
+
+
+
+(3) 一个生产者一个消费者: 操作栈
+使生产者向堆栈List对象中放入数据，使消费者从List堆栈中取出数据。List最大容量是1
+举例如下:
+package chapter03.section1.thread_3_1_11.project_3_stack_1;
+
+import java.util.ArrayList;
+import java.util.List;
+
+public class MyStack {
+	private List<String> list = new ArrayList<>();
+	
+	synchronized public void push() {
+		try {
+			if(list.size() == 1) {
+				this.wait();
+			}
+			list.add("anyString=" + Math.random());
+			this.notify(); 
+			System.out.println("push=" + list.size());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+	
+	synchronized public String pop(){
+		String returnValue = "";
+		try {
+			if(list.size() == 0) {
+				System.out.println("pop操作中的: "
+						+ Thread.currentThread().getName() + " 线程呈wait状态");
+				this.wait();
+			}
+			returnValue = "" + list.get(0);
+			list.remove(0);
+			this.notify();
+			System.out.println("pop=" + list.size());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+		return returnValue;
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_3_stack_1;
+
+public class P {
+
+	private MyStack myStack;
+
+	public P(MyStack myStack) {
+		super();
+		this.myStack = myStack;
+	}
+
+	public void pushService() {
+		myStack.push();
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_3_stack_1;
+
+public class C {
+
+	private MyStack myStack;
+
+	public C(MyStack myStack) {
+		super();
+		this.myStack = myStack;
+	}
+
+	public void popService() {
+		System.out.println("pop=" + myStack.pop());
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_3_stack_1;
+
+public class P_Thread extends Thread {
+
+	private P p;
+
+	public P_Thread(P p) {
+		super();
+		this.p = p;
+	}
+
+	@Override
+	public void run() {
+		while (true) {
+			p.pushService();
+		}
+	}
+
+}
+
+
+package chapter03.section1.thread_3_1_11.project_3_stack_1;
+
+public class C_Thread extends Thread {
+
+	private C r;
+
+	public C_Thread(C r) {
+		super();
+		this.r = r;
+	}
+
+	@Override
+	public void run() {
+		while (true) {
+			r.popService();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_11.project_3_stack_1;
+
+public class Run {
+	public static void main(String[] args) {
+		MyStack myStack = new MyStack();
+
+		P p = new P(myStack);
+		C r = new C(myStack);
+
+		P_Thread pThread = new P_Thread(p);
+		C_Thread rThread = new C_Thread(r);
+		pThread.start();
+		rThread.start();
+	}
+}
+/*
+result:
+.................................
+pop=anyString=0.28538502891582784
+push=1
+pop=0
+pop=anyString=0.7583543613696966
+push=1
+pop=0
+pop=anyString=0.1512771979278016
+push=1
+pop=0
+ */
+
+
+
+(4) 一个生产者多个消费者-操作栈: 解决wait条件改变与假死
+使用一个生产者向堆栈List对象中放入数据，而多个消费者从List堆栈中取出数据
+举个例子:
+我们直接使用上方的例子，只需改变Run类即可
+package chapter03.section1.thread_3_1_11.project_4_stack_2_old;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException {
+		MyStack myStack = new MyStack();
+
+		P p = new P(myStack);
+
+		C r1 = new C(myStack);
+		C r2 = new C(myStack);
+		C r3 = new C(myStack);
+		C r4 = new C(myStack);
+		C r5 = new C(myStack);
+
+		P_Thread pThread = new P_Thread(p);
+		pThread.start();
+
+		C_Thread cThread1 = new C_Thread(r1);
+		C_Thread cThread2 = new C_Thread(r2);
+		C_Thread cThread3 = new C_Thread(r3);
+		C_Thread cThread4 = new C_Thread(r4);
+		C_Thread cThread5 = new C_Thread(r5);
+		cThread1.start();
+		cThread2.start();
+		cThread3.start();
+		cThread4.start();
+		cThread5.start();
+	}
+}
+/*
+result:
+push=1
+pop=0
+pop=anyString=0.2277061445557783
+pop操作中的: Thread-4 线程呈wait状态
+pop操作中的: Thread-1 线程呈wait状态
+pop操作中的: Thread-3 线程呈wait状态
+pop操作中的: Thread-2 线程呈wait状态
+pop操作中的: Thread-5 线程呈wait状态
+push=1
+pop=0
+pop=anyString=0.919935358446316
+pop操作中的: Thread-4 线程呈wait状态
+Exception in thread "Thread-1" java.lang.IndexOutOfBoundsException: Index 0 out-of-bounds for length 0
+	at java.base/jdk.internal.util.Preconditions.outOfBounds(Unknown Source)
+	at java.base/jdk.internal.util.Preconditions.outOfBoundsCheckIndex(Unknown Source)
+	at java.base/jdk.internal.util.Preconditions.checkIndex(Unknown Source)
+	at java.base/java.util.Objects.checkIndex(Unknown Source)
+	at java.base/java.util.ArrayList.get(Unknown Source)
+	at chapter03.section1.thread_3_1_11.project_4_stack_2_old.MyStack.pop(MyStack.java:31)
+	at chapter03.section1.thread_3_1_11.project_4_stack_2_old.C.popService(C.java:13)
+	at chapter03.section1.thread_3_1_11.project_4_stack_2_old.C_Thread.run(C_Thread.java:15)
+可以看到还没有进行push操作，Thread-1被唤醒继续执行remove(0)方法，因此而数组越界异常
+ */
+结果分析:
+为了解决如上问题，我们可以将if(list.size() == 1)换成while(list.size()==1)，并
+且为了避免假死，将notify()方法改成notifyAll()方法 
+
+
+(5) 多个生产者多个消费者-操作栈
+只需将Run类作如下改变即可
+
+package chapter03.section1.thread_3_1_11.project_8_stack_4;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException {
+		MyStack myStack = new MyStack();
+
+		P p1 = new P(myStack);
+		P p2 = new P(myStack);
+		P p3 = new P(myStack);
+		P p4 = new P(myStack);
+		P p5 = new P(myStack);
+		P p6 = new P(myStack);
+
+		P_Thread pThread1 = new P_Thread(p1);
+		P_Thread pThread2 = new P_Thread(p2);
+		P_Thread pThread3 = new P_Thread(p3);
+		P_Thread pThread4 = new P_Thread(p4);
+		P_Thread pThread5 = new P_Thread(p5);
+		P_Thread pThread6 = new P_Thread(p6);
+		pThread1.start();
+		pThread2.start();
+		pThread3.start();
+		pThread4.start();
+		pThread5.start();
+		pThread6.start();
+
+		C r1 = new C(myStack);
+		C r2 = new C(myStack);
+		C r3 = new C(myStack);
+		C r4 = new C(myStack);
+		C r5 = new C(myStack);
+		C r6 = new C(myStack);
+		C r7 = new C(myStack);
+		C r8 = new C(myStack);
+
+		C_Thread cThread1 = new C_Thread(r1);
+		C_Thread cThread2 = new C_Thread(r2);
+		C_Thread cThread3 = new C_Thread(r3);
+		C_Thread cThread4 = new C_Thread(r4);
+		C_Thread cThread5 = new C_Thread(r5);
+		C_Thread cThread6 = new C_Thread(r6);
+		C_Thread cThread7 = new C_Thread(r7);
+		C_Thread cThread8 = new C_Thread(r8);
+
+		cThread1.start();
+		cThread2.start();
+		cThread3.start();
+		cThread4.start();
+		cThread5.start();
+		cThread6.start();
+		cThread7.start();
+		cThread8.start();
+	}
+}
+/*
+result:
+..................................
+pop操作中的: Thread-8 线程呈wait状态
+pop操作中的: Thread-6 线程呈wait状态
+push=1
+pop=0
+pop=anyString=0.030452886723291828
+push=1
+pop=0
+pop=anyString=0.8499823296867753
+pop操作中的: Thread-6 线程呈wait状态
+pop操作中的: Thread-8 线程呈wait状态
+..................................
+*/
+
+
+3. 通过管道进行线程间通信
+我们知道线程进程之间通信一般都是利用共享内存(全局变量等)、消息队列，redis订阅发布
+机制缓存等，以及管道等方式。下面我们来介绍Java语言中线程利用管道进行通信
+Java语言中提供了各种各样的输入输出流，让我们可以很方便地对数据进行操作，其中的
+pipeStream管道流是一种特殊的流，用于在不同线程间直接传输数据。一个线程发送数据到
+输出管道，另一个线程从输入管道中读数据，通过使用管道，实现不同线程间的通信，而无
+须借助于类似临时文件之类的东西。
+在Java的JDK中提供了4个类来使线程间可以进行通信:
+1) PipedInputStream和PipedOutputStream 字节流 
+	PipedInputStream继承自抽象类InputStream，而PipedOutputStream继承自抽象类
+OutputStream
+2) PipedReader和PipedWriter 字符流
+ 	PipedReader和PipedWriter类分别继承抽象类Reader和Writer.
+
+(1) 字符流
+PipedInputStream/PipedOutputStream文档翻译:
+1)PipedInputStream类翻译:
+
+PipedInputStream类介绍
+public class PipedInputStream
+extends InputStream
+A piped input stream should be connected to a piped output stream; the piped input stream then 
+provides whatever data bytes are written to the piped output stream. Typically, data is read 
+from a PipedInputStream object by one thread and data is written to the corresponding 
+PipedOutputStream by some other thread. Attempting to use both objects from a single thread 
+is not recommended, as it may deadlock the thread. The piped input stream contains a buffer, 
+decoupling read operations from write operations, within limits. A pipe is said to be  broken 
+if a thread that was providing data bytes to the connected piped output stream is no longer alive.
+PipedInpustream继承InputStream抽象类
+一个管道输入流应该连接到一个管道输出流;管道输入流提供写入管道输出流的任何数据字节。通常，一个线程从PipedInput
+Stream对象读取数据，另一个线程将数据写入相应的PipedOutputStream。不建议在单个线程使用这两个对象，因为这会导致
+线程死锁。管道输入流包含一个缓冲区，在一定范围内将读操作与写操作分离。如果向连接的管道输出流提供数据字节的线程
+不再是活动的，则称管道断开。
+
+
+
+constructors构造函数:
+PipedInputStream():
+	Creates a PipedInputStream so that it is not yet connected. It must be connected to a 
+PipedOutputStream before being used.
+	创建一个还未连接的PipedInputStream对象。在使用之前，必须连接到PipedOutputStream.
+
+PipedInputStream(int pipeSize):
+	Creates a PipedInputStream so that it is not yet connected and uses the specified pipe 
+size for the pipe's buffer. It must be connected to a PipedOutputStream before being used.
+	创建一个尚未连接的PipedInputStream对象，并为管道的缓冲区指定大小。
+
+
+
+read():
+public int read​()
+         throws IOException
+Reads the next byte of data from this piped input stream. The value byte is returned as an int 
+in the range 0 to 255. This method blocks until input data is available, the end of the stream
+is detected, or an exception is thrown.
+从管道输入流中读取下一个字节的数据。值字节以int形式返回，范围是0-255.此方法将阻塞，知道输入
+数据可用，检测到流的结束或抛出异常为止。
+Specified by:
+read in class InputStream
+Returns:
+the next byte of data, or -1 if the end of the stream is reached.
+数据的下一个字节，如果结束为-1
+Throws:
+IOException - if the pipe is unconnected, broken, closed, or if an I/O error occurs.
+IOException - 如果管道没有连接、破损、关闭、或者I/O错误发生了
+
+
+
+read(byte[] b, int off, int len):
+public int read​(byte[] b,
+                int off,
+                int len)
+         throws IOException
+Reads up to len bytes of data from this piped input stream into an array of bytes. Less than len 
+bytes will be read if the end of the data stream is reached or if len exceeds the pipe's buffer 
+size. If len is zero, then no bytes are read and 0 is returned; otherwise, the method blocks 
+until at least 1 byte of input is available, end of the stream has been detected, or an exception 
+is thrown.
+从这个管道输入流中读取len字节数据，然后赋值到一个字节数组中。如果到达数据流的末尾或者len长度超过管道缓冲区的
+大小，那么将读取小于len字节数据。如果len是0,则不读取字节，返回0;否则，该方法将阻塞，直到至少1字节的输入可用，
+流的末尾被检测到，或者抛出异常。
+Overrides:
+read in class InputStream
+Parameters:
+b - the buffer into which the data is read.
+b 字节缓冲区，读取接收到的数据
+off - the start offset in the destination array b
+b中开始赋值的偏移量
+len - the maximum number of bytes read.
+读取的最大字节数
+Returns:
+the total number of bytes read into the buffer, or -1 if there is no more data because the end of 
+the stream has been reached.
+从缓冲区读取的总字节数，如果到达数据流末尾没有更多的数据，返回-1
+Throws:
+NullPointerException - If b is null.
+b是null,抛出NullPointerException空指针异常
+IndexOutOfBoundsException - If off is negative, len is negative, or len is greater than b.length - off
+数组越界异常- 如果off是负数，len是负数，或者len比b大
+IOException - if the pipe is broken, unconnected, closed, or if an I/O error occurs.
+
+
+
+connect(PipedOutputStream src):
+public void connect​(PipedOutputStream src)
+             throws IOException
+Causes this piped input stream to be connected to the piped output stream src. If this object is 
+already connected to some other piped output stream, an IOException is thrown.
+使管道输入流连接到管道输出流src.如果这个对象已经连接到其他的输出流，则抛出IOException
+If src is an unconnected piped output stream and snk is an unconnected piped input stream, they 
+may be connected by either the call:
+如果src是一个未连接的管道输出流，而snk是一个未连接的管道输入流，则它们可通过以下任一方式连接
+
+snk.connect(src) 
+or the call:
+
+src.connect(snk) 
+The two calls have the same effect. 两个调用作用一样
+
+Parameters:
+src - The piped output stream to connect to.
+src是连接的管道输出流
+Throws:
+IOException - if an I/O error occurs.
+
+
+
+close():
+public void close​()
+           throws IOException
+Closes this piped input stream and releases any system resources associated with the stream.
+关闭这个管道输入流并且释放与这个流有关的任何系统资源
+Throws:
+IOException - if an I/O error occurs.
+
+
+
+2) PipedOutputStream类翻译
+PipedOutputStream类介绍
+public class PipedOutputStream
+extends OutputStream
+A piped output stream can be connected to a piped input stream to create a communications pipe. 
+The piped output stream is the sending end of the pipe. Typically, data is written to a 
+PipedOutputStream object by one thread and data is read from the connected PipedInputStream 
+by some other thread. Attempting to use both objects from a single thread is not recommended 
+as it may deadlock the thread. The pipe is said to be  broken if a thread that was reading 
+data bytes from the connected piped input stream is no longer alive.
+一个管道输出流可以连接到一个管道输入流以创建通信管道。管道输出流是管道的发送端。通常，数据由一个线程写入
+到PipedOutputStream对象中，数据通过其它线程从连接的PipedOutputStream对象中读取。不建议在单线程中使用
+这两个对象，因为它可能会导致线程死锁。如果从连接的管道输入流中读取数据字节的线程不在活动，则管道
+将被断开。
+
+constructors构造函数:
+PipedOutputStream():
+	Creates a piped output stream that is not yet connected to a piped input stream. It must
+be connected to a piped input stream, either by the receiver or the sender, before being used.
+创建尚未连接到管道输入流的管道输出流对象。在使用之前，它必须通过接收方或发送方连接到管道输入流。
+
+PipedOutputStream(PipedInputStream snk):
+	Creates a piped output stream connected to the specified piped input stream. Data bytes 
+written to this stream will then be available as input from snk.
+创建连接到特定管道输入流的管道输出流对象。数据字节将被写入这个流以便从snk输入
+Parameters:
+snk - The piped input stream to connect to.
+Throws:
+IOException - if an I/O error occurs.
+
+
+
+write(int b):
+public void write​(int b)
+           throws IOException
+Writes the specified byte to the piped output stream.
+将指定的字节写入管道输出流
+
+Implements the write method of OutputStream.
+
+Specified by:
+write in class OutputStream
+Parameters:
+b - the byte to be written.
+Throws:
+IOException - if the pipe is broken, unconnected, closed, or if an I/O error occurs.
+
+
+
+write(byte[] b, int off, int len):
+public void write​(byte[] b,
+                  int off,
+                  int len)
+           throws IOException
+Writes len bytes from the specified byte array starting at offset off to this piped output 
+stream. This method blocks until all the bytes are written to the output stream.
+从偏移位置开始的指定字节数组中写入len字节到这个管道输出流。此方法将阻塞，直到所有字节都写入输出流。
+Overrides:
+write in class OutputStream
+Parameters:
+b - the data.
+off - the start offset in the data.
+len - the number of bytes to write.
+Throws:
+IOException - if the pipe is broken, unconnected, closed, or if an I/O error occurs.
+
+
+
+connect(PipedInputStream snk):
+public void connect​(PipedInputStream snk)
+             throws IOException
+Connects this piped output stream to a receiver. If this object is already connected to some 
+other piped input stream, an IOException is thrown.
+If snk is an unconnected piped input stream and src is an unconnected piped output stream, 
+they may be connected by either the call:
+此用法和PipedInputStream类似
+
+ src.connect(snk)
+or the call:
+ snk.connect(src)
+The two calls have the same effect.
+Parameters:
+snk - the piped input stream to connect to.
+Throws:
+IOException - if an I/O error occurs.
+
+
+
+close():
+public void close​()
+           throws IOException
+Closes this piped output stream and releases any system resources associated with this stream. 
+This stream may no longer be used for writing bytes.
+关闭管道输出流并释放与此流关联的任何系统资源。
+此流可能不再用于写入字节。
+Throws:
+IOException - if an I/O error occurs.
+
+
+
+举个例子:
+package chapter03.section1.thread_3_1_12.project_1_pipeInputOutput;
+
+import java.io.IOException;
+import java.io.PipedOutputStream;
+
+public class WriteData {
+	
+	public void writeMethod(PipedOutputStream out) {
+		try {
+			System.out.println("write :");
+			for(int i = 0; i < 50; i++) {
+				String outData = "" + (i + 1);
+				out.write(outData.getBytes());
+				System.out.print(outData);
+			}
+			System.out.println();
+			out.close();
+		} catch (IOException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_12.project_1_pipeInputOutput;
+
+import java.io.IOException;
+import java.io.PipedInputStream;
+
+public class ReadData {
+	public void readMethod(PipedInputStream input) {
+		try {
+			System.out.println("read : ");
+			byte[] byteArray = new byte[20];
+			int readLength = input.read(byteArray);
+			//返回从缓冲区读取的字节数
+			while(readLength != -1) {
+				String newData = new String(byteArray, 0, readLength);
+				System.out.print(newData);
+//				readLength = input.read(byteArray, 0, byteArray.length);
+				readLength = input.read(byteArray);//一次最多读取20个字节的数据
+			}
+			System.out.println();
+			input.close();
+		} catch (IOException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_12.project_1_pipeInputOutput;
+
+import java.io.PipedOutputStream;
+
+public class ThreadWrite extends Thread{
+	
+	private WriteData write;
+	private PipedOutputStream out;
+	
+	public ThreadWrite(WriteData write, PipedOutputStream out) {
+		this.write = write;
+		this.out = out;
+	}
+	
+	@Override
+	public void run() {
+		write.writeMethod(out);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_12.project_1_pipeInputOutput;
+
+import java.io.PipedInputStream;
+
+public class ThreadRead extends Thread{
+	private ReadData read;
+	private PipedInputStream input;
+	
+	public ThreadRead(ReadData read, PipedInputStream input) {
+		this.read = read;
+		this.input = input;
+	}
+	
+	@Override
+	public void run() {
+		read.readMethod(input);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_12.project_1_pipeInputOutput;
+
+import java.io.IOException;
+import java.io.PipedInputStream;
+import java.io.PipedOutputStream;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			WriteData writeData = new WriteData();
+			ReadData readData = new ReadData();
+			
+			PipedInputStream inputStream = new PipedInputStream();
+			PipedOutputStream outputStream = new PipedOutputStream();
+			
+			//inputStream.connect(outputStream); 两者作用一样
+			outputStream.connect(inputStream);
+			
+			ThreadRead threadRead = new ThreadRead(readData, inputStream);
+			threadRead.start();
+			
+			Thread.sleep(2000);
+			
+			ThreadWrite threadWrite = new ThreadWrite(writeData, outputStream);
+			threadWrite.start();	
+		} catch (IOException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+结果分析:
+读取线程先启动，由于当时没有数据被写入，所以线程阻塞在int readLength = in.read
+(byteArray);直到有数据被写入，才继续向下运行。
+
+
+(2) 字符流
+
+PipedWriter/PipedReader文档翻译:
+1)PidedWrite翻译
+
+PidedWriter类介绍:
+public class PipedWriter
+extends Writer
+Piped character-output streams.
+管道字符输出流
+
+
+constructors:
+PipedWriter():
+Creates a piped writer that is not yet connected to a piped reader. It must be connected to 
+a piped reader, either by the receiver or the sender, before being used.
+创建一个尚未连接到管道输入流的管道输出流对象。在使用之前，它必须连接到一个管道输入流，从接收端或者发送端
+连接均可
+
+PipedWriter(PipedReader snk) throws IOException:
+Connects this piped writer to a receiver. If this object is already connected to some other
+piped reader, an IOException is thrown.
+If snk is an unconnected piped reader and src is an unconnected piped writer, they may be 
+connected by either the call:
+将这个管道输出流对象连接到接收端。如果这个对象已经连接到了其他的管道输出流对象，抛出IOException异常
+实际上构造函数主要工作就是对snk的一些属性做了初始化与合法判断
+如果snk与src都没有连接，他们可以通过下面任一方法连接
+
+ src.connect(snk)
+or the call:
+ snk.connect(src)
+The two calls have the same effect.
+Parameters:
+snk - the piped reader to connect to.
+Throws:
+IOException - if an I/O error occurs.
+
+
+
+connect(PipedReader snk):
+public void connect​(PipedReader snk)
+             throws IOException
+Connects this piped writer to a receiver. If this object is already connected to some other 
+piped reader, an IOException is thrown.
+If snk is an unconnected piped reader and src is an unconnected piped writer, they may be 
+connected by either the call:
+将管道输出对象与接收端连接。如果此对象已经连接了其他的管道输入对象，抛出IOException异常
+
+ src.connect(snk)
+or the call:
+ snk.connect(src)
+The two calls have the same effect.
+Parameters:
+snk - the piped reader to connect to.
+Throws:
+IOException - if an I/O error occurs.
+
+
+
+write(int c):
+public void write​(int c)
+           throws IOException
+Writes the specified char to the piped output stream. If a thread was reading data characters 
+from the connected piped input stream, but the thread is no longer alive, then an IOException 
+is thrown.
+将指定的字符写入管道输出流。如果线程正在从连接的管道输出流读取数据字符，但线程不在存活isAlive()方法返回
+false,那么抛出IOException异常
+Implements the write method of Writer.
+
+Overrides:
+write in class Writer 
+Parameters:
+c - the char to be written. 写入的字符
+Throws:
+IOException - if the pipe is broken, unconnected, closed or an I/O error occurs.
+
+
+
+write(char[] cbuf, int off, int len):
+public void write​(char[] cbuf,
+                  int off,
+                  int len)
+           throws IOException
+Writes len characters from the specified character array starting at offset off to this piped 
+output stream. This method blocks until all the characters are written to the output stream. 
+If a thread was reading data characters from the connected piped input stream, but the thread 
+is no longer alive, then an IOException is thrown.
+从偏移位置开始的指定字符数组中写入len字符到管道输出流。此方法将阻塞，直到所有的字符都写入输出流。如果
+一个线程正在从连接的管道输入流中读取数据字符，但该线程不再是活动的，则抛出IOException
+Specified by:
+write in class Writer
+Parameters:
+cbuf - the data.
+off - the start offset in the data.
+len - the number of characters to write.
+Throws:
+IndexOutOfBoundsException - If off is negative, or len is negative, or off + len is negative 
+or greater than the length of the given array
+IOException - if the pipe is broken, unconnected, closed or an I/O error occurs.
+
+
+
+close():
+public void close​()
+           throws IOException
+Closes this piped output stream and releases any system resources associated with this stream. 
+This stream may no longer be used for writing characters.
+关闭此管道输出流并释放于此流关联的任何系统资源。此流可能不再用于写入字符。
+Throws:
+IOException - if an I/O error occurs.
+
+
+2)PipedReader翻译
+
+PipedReader类介绍
+extends Reader
+Piped character-input streams.
+管道字符输入流
+
+constructors:
+PipedReader():
+public PipedReader​()
+Creates a PipedReader so that it is not yet connected. It must be connected to a PipedWriter 
+before being used.
+
+
+PipedReader(int pipeSize):
+public PipedReader​(int pipeSize)
+Creates a PipedReader so that it is not yet connected and uses the specified pipe size for 
+the pipe's buffer. It must be connected to a PipedWriter before being used.
+创建尚未连接的PipedReader对象，使用指定缓冲区大小。在使用之前必须要连接到一个PipedWriter对象
+Parameters:
+pipeSize - the size of the pipe's buffer.
+Throws:
+IllegalArgumentException - if pipeSize <= 0.
+
+
+PipedReader(PipedWriter src):
+public PipedReader​(PipedWriter src)
+            throws IOException
+Creates a PipedReader so that it is connected to the piped writer src. Data written to src 
+will then be available as input from this stream.
+创建一个PipedReader对象，使其连接到管道输出流对象src.写入数据的src将会作为此流的输入提供者
+
+Parameters:
+src - the stream to connect to.
+Throws:
+IOException - if an I/O error occurs.
+
+
+connect(PipedWriter src):
+public void connect​(PipedWriter src)
+             throws IOException
+Causes this piped reader to be connected to the piped writer src. If this object is already 
+connected to some other piped writer, an IOException is thrown.
+If src is an unconnected piped writer and snk is an unconnected piped reader, they may be 
+connected by either the call:
+
+snk.connect(src) 
+or the call:
+
+src.connect(snk) 
+The two calls have the same effect.
+
+Parameters:
+src - The piped writer to connect to.
+Throws:
+IOException - if an I/O error occurs.
+
+
+read():
+public int read​()
+         throws IOException
+Reads the next character of data from this piped stream. If no character is available 
+because the end of the stream has been reached, the value -1 is returned. This method 
+blocks until input data is available, the end of the stream is detected, or an exception is thrown.
+读取此管道流中的数据的下一个字符。如果没有字符可用，因为已到达流的末端，则返回值-1.此番发将阻塞，直到
+输入数据可用、检测到流的末尾或引发异常。
+
+Overrides:
+read in class Reader
+Returns:
+the next character of data, or -1 if the end of the stream is reached.
+Throws:
+IOException - if the pipe is broken, unconnected, closed, or an I/O error occurs.
+
+
+read(char[] cbuf, int off, int len):
+public int read​(char[] cbuf,
+                int off,
+                int len)
+         throws IOException
+Reads up to len characters of data from this piped stream into an array of characters. 
+Less than len characters will be read if the end of the data stream is reached or if len 
+exceeds the pipe's buffer size. This method blocks until at least one character of input 
+is available.
+Specified by:
+read in class Reader
+Parameters:
+cbuf - the buffer into which the data is read.
+off - the start offset of the data.
+len - the maximum number of characters read.
+Returns:
+the total number of characters read into the buffer, or -1 if there is no more data 
+because the end of the stream has been reached.
+Throws:
+IOException - if the pipe is broken, unconnected, closed, or an I/O error occurs.
+IndexOutOfBoundsException - If an I/O error occurs
+
+
+close():
+public void close​()
+           throws IOException
+Closes this piped stream and releases any system resources associated with the stream.
+Throws:
+IOException - if an I/O error occurs.
+
+
+两个线程中通过管道流进行字符数据的传输
+举个例子:
+package chapter03.section1.thread_3_1_13.project_1_pipeReaderWriter;
+
+import java.io.IOException;
+import java.io.PipedReader;
+
+public class ReadData {
+	public void readMethod(PipedReader input) {
+		try {
+			System.out.println("read :");
+			char[] byteArray = new char[20];
+			int readLength = input.read(byteArray);
+			while(readLength != -1) {
+				String newData = new String(byteArray, 0, readLength);
+				System.out.print(newData);
+				readLength = input.read(byteArray);
+			}
+			System.out.println();
+			input.close();
+		} catch (IOException e) {
+			// TODO: handle exceptione
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_13.project_1_pipeReaderWriter;
+
+import java.io.IOException;
+import java.io.PipedWriter;
+
+public class WriteData {
+	
+	public void writeMethod(PipedWriter out) {
+		try {
+			System.out.println("write :");
+			for(int i = 0; i < 50; i++) {
+				String outData = "" + (i + 1);
+				out.write(outData);
+				System.out.print(outData);
+			}
+			System.out.println();
+			out.close();
+		} catch (IOException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_13.project_1_pipeReaderWriter;
+
+import java.io.PipedReader;
+
+public class ThreadRead extends Thread{
+	
+	private ReadData read;
+	private PipedReader in;
+	
+	public ThreadRead(ReadData read, PipedReader in) {
+		super();
+		this.read = read;
+		this.in = in;
+	}
+	
+	@Override
+	public void run() {
+		read.readMethod(in);
+	}
+}
+
+
+package chapter03.section1.thread_3_1_13.project_1_pipeReaderWriter;
+
+import java.io.PipedWriter;
+
+public class ThreadWrite extends Thread {
+	
+	private WriteData write;
+	private PipedWriter out;
+	
+	public ThreadWrite(WriteData write, PipedWriter out) {
+		super();
+		this.write = write;
+		this.out = out;
+	}
+	
+	@Override
+	public void run() {
+		write.writeMethod(out);
+	}
+	
+}
+
+
+package chapter03.section1.thread_3_1_13.project_1_pipeReaderWriter;
+
+import java.io.IOException;
+import java.io.PipedReader;
+import java.io.PipedWriter;
+
+public class Run {
+
+	public static void main(String[] args) {
+
+		try {
+			WriteData writeData = new WriteData();
+			ReadData readData = new ReadData();
+
+			PipedReader inputStream = new PipedReader();
+			PipedWriter outputStream = new PipedWriter();
+
+			// inputStream.connect(outputStream);
+			outputStream.connect(inputStream);
+
+			ThreadRead threadRead = new ThreadRead(readData, inputStream);
+			threadRead.start();
+
+			Thread.sleep(2000);
+
+			ThreadWrite threadWrite = new ThreadWrite(writeData, outputStream);
+			threadWrite.start();
+
+		} catch (IOException e) {
+			e.printStackTrace();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+(3) 实战 等待/通知之交叉备份
+创建20个线程，其中10个线程是将数据备份到A数据库中，另外10个线程将数据备份到B数据库中，并且备份
+A数据库和B数据库是交叉进行的。
+我们使用等待/通知技术，让20个线程的运行效果变成有序的。
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class DBTools {
+	
+	/**
+	 * 变量prevIsA的主要作用就是确保备份"****"数据库A首先执行，
+	 * 然后"@@@@"数据库B交替进行备份
+	 */
+	volatile private boolean prevIsA = false;
+	
+	synchronized public void backupA() {
+		try {
+			while(prevIsA == true) {
+				wait(); //先前A备份，则A等待B备份
+			}
+			for(int i = 0; i < 5; i++) {
+				System.out.println("****");
+			}
+			prevIsA = true;
+			notifyAll();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+	
+	synchronized public void backupB() {
+		try {
+			while(prevIsA == false) {
+				wait();
+			}
+			for(int i = 0; i < 5; i++) {
+				System.out.println("@@@@");
+			}
+			prevIsA = false;
+			notifyAll();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class BackupA extends Thread{
+	private DBTools dbtools;
+	
+	public BackupA(DBTools dbtools) {
+		super();
+		this.dbtools = dbtools;
+	}
+	
+	@Override
+	public void run() {
+		dbtools.backupA();
+	}
+}
+
+
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class BackupB extends Thread{
+	private DBTools dbtools;
+	
+	public BackupB(DBTools dbtools) {
+		super();
+		this.dbtools = dbtools;
+	}
+	
+	@Override
+	public void run() {
+		dbtools.backupB();
+	}
+}
+
+
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class Run {
+
+	public static void main(String[] args) {
+		DBTools dbtools = new DBTools();
+		for(int i = 0; i < 20; i++) {
+			BackupB output = new BackupB(dbtools);
+			output.start();
+			BackupA input = new BackupA(dbtools);
+			input.start();
+		}
+	}
+}
+/*
+result:
+@@@@
+@@@@
+@@@@
+@@@@
+@@@@
+****
+****
+****
+****
+****
+@@@@
+@@@@
+@@@@
+@@@@
+@@@@
+交替运行
+*/
+结果分析:
+这个程序并没有利用好多线程优势，只是一个示例
+
+4. 方法join的使用
+在很多情况下，主线程创建并启动子线程，如果子线程中要进行大量的耗时运算(比如网络请
+求，下载数据、读写文件等)主线程往往将早于子线程结束之前结束。这时，如果主线程想等待
+子线程执行完之后再结束，比如子线程处理一个数据，主线程要取得这个数据中的值，就要用
+到join()方法了。方法join()的作用是等待线程对象销毁。
+
+方法join的作用是使所属的线程对象x正常执行run()方法中的任务，而使当前线程z进行无限期
+的阻塞，等待线程x销毁后(即线程的状态是TEMINATED)再继续执行线程z后面的代码
+join在内部使用wait()方法进行等待，而synchronized关键字使用的是"对象监视器"原理作为
+同步
+
+
+阅读JDK9文档
+join():
+public final void join​()
+                throws InterruptedException
+Waits for this thread to die.
+An invocation of this method behaves in exactly the same way as the invocation
+等待此线程死亡
+调用方法join()与调用join(0)作用完全相同
+
+join(0)
+Throws:
+InterruptedException - if any thread has interrupted the current thread. The 
+interrupted status of the current thread is cleared when this exception is thrown
+抛出:
+InterrupedException - 如果有任何线程中断了当前的线程。当这个异常被抛出，则当前线程
+的中断状态被清除
+
+
+join(long millis):
+public final void join​(long millis)
+                throws InterruptedException
+Waits at most millis milliseconds for this thread to die. A timeout of 0 means 
+to wait forever.
+This implementation uses a loop of this.wait calls conditioned on this.isAlive. 
+As a thread terminates the this.notifyAll method is invoked. It is recommended 
+that applications not use wait, notify, or notifyAll on Thread instances.
+最多等待调用此方法的线程死亡millis毫秒,0意味着永远等待。实现是使用一个调用wait(0)的循环
+while(isAlive){this.wait(0);}.当这个线程被终止之后释放锁，this.notifyAll通知线程来
+准备获得这个锁。建议应用程序不要在线程实例上使用等待、通知或notifyAll方法。
+
+Parameters:
+millis - the time to wait in milliseconds 最大等待的毫秒数
+Throws:
+IllegalArgumentException - if the value of millis is negative 
+如果millis是负数，那么抛出非法参数异常IllegalArgumentException
+InterruptedException - if any thread has interrupted the current thread. The 
+interrupted status of the current thread is cleared when this exception is thrown.
+如果任意线程中断了当前线程。那么抛出这个异常，同时当前线程的中断状态被清除
+
+
+
+(1) 学习方法join前的铺垫
+package chapter03.section2.thread_3_2_1.project_1_joinTest1;
+
+public class MyTest extends Thread {
+	
+	@Override
+	public void run() {
+		try {
+			int secondValue = (int)(Math.random() * 10000);
+			System.out.println(secondValue);
+			Thread.sleep(secondValue);
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_1.project_1_joinTest1;
+
+public class Test {
+	public static void main(String[] args) {
+		MyTest threadTest = new MyTest();
+		threadTest.start();
+		
+		// Thread.sleep(?)
+		System.out.println("我想当threadTest对象执行完毕后我再执行");
+		System.out.println("但上面代码中的sleep()中的值应该写多少呢？");
+		System.out.println("答案是：根据不能确定:)");	
+	}
+}
+结果分析:
+只需要修改Test.java类就可以解决
+package chapter03.section2.thread_3_2_2.project_1_joinTest2;
+
+public class Test {
+	public static void main(String[] args) throws InterruptedException{
+		MyTest threadTest = new MyTest();
+		threadTest.start();
+		
+		threadTest.join();
+		
+		// Thread.sleep(?)
+		System.out.println("我想当threadTest对象执行完毕后我再执行");
+		System.out.println("但上面代码中的sleep()中的值应该写多少呢？");
+		System.out.println("答案是：根据不能确定:)");	
+	}
+}
+/*
+result:
+8370
+我想当threadTest对象执行完毕后我再执行
+但上面代码中的sleep()中的值应该写多少呢？
+答案是：根据不能确定:)
+*/
+结果分析:
+join方法实现是通过wait.当main线程调用t.join时，main线程会获得线程对象t锁，
+调用该对象的wait(等待时间)，直到该对象唤醒main线程.这些具体代码设计到JVM
+低层实现，由于本人对C++不太熟，也暂时没有学习计划，对于这块感兴趣的可以去看
+OpenJdk 源码: http://openjdk.java.net/
+
+(2) 方法join与异常
+在join过程中，如果当前线程对象被中断，则当前线程出现异常
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class ThreadA extends Thread {
+	
+	@Override
+	public void run() {
+		for(int i = 0; i < Integer.MAX_VALUE; i++) {
+			String newString = new String();
+			Math.random();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class ThreadB extends Thread{
+	
+	@Override
+	public void run() {
+		try {
+			ThreadA a = new ThreadA();
+			a.start();
+			a.join();
+			
+			System.out.println("线程B在run end处打印了");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			System.out.println("线程B在catch处打印了");
+			e.printStackTrace();
+		}
+	}
+
+}
+
+
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class ThreadC extends Thread {
+	
+	private ThreadB threadB;
+	
+	public ThreadC(ThreadB threadB) {
+		super();
+		this.threadB = threadB;
+	}
+	
+	@Override
+	public void run() {
+		threadB.interrupt();
+	}
+}
+
+
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		try {
+			ThreadB b = new ThreadB();
+			b.start();
+			
+			Thread.sleep(500);
+			
+			ThreadC c = new ThreadC(b);
+			c.start();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+线程B在catch处打印了
+java.lang.InterruptedException
+	at java.base/java.lang.Object.wait(Native Method)
+	at java.base/java.lang.Thread.join(Unknown Source)
+	at java.base/java.lang.Thread.join(Unknown Source)
+	at chapter03.section2.thread_3_2_3.project_1_joinException.ThreadB.run(ThreadB.java:10)
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
