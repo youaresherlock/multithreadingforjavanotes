@@ -1,0 +1,1042 @@
+本文是我学习Java多线程以及高并发知识的第一本书的学习笔记，
+书名是<<Java多线程编程核心技术>>，作者是大佬企业高级项目经理
+高洪岩前辈，在此向他致敬。我将配合开发文档以及本书和其他的博客
+奉献着的文章来学习，同时做一些简单的总结。有些基础的东西我就不
+细分析了，建议以前接触过其他语言多线程或者没有系统学习过多线程
+的开发者来看。另外需要注意的是，博客中给出的一些英文文档我就简单
+翻译了，重要的部分会详细翻译，要不太浪费时间了，这个是我想提高
+自己的英文阅读水平和文档查看能力，想要积攒内功的人可以用有谷歌
+翻译自己看文档细读。(中文文档建议只参考，毕竟你懂得...)
+
+
+(3) 实战 等待/通知之交叉备份
+创建20个线程，其中10个线程是将数据备份到A数据库中，另外10个线程将数据备份到B数据库中，并且备份
+A数据库和B数据库是交叉进行的。
+我们使用等待/通知技术，让20个线程的运行效果变成有序的。
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class DBTools {
+	
+	/**
+	 * 变量prevIsA的主要作用就是确保备份"****"数据库A首先执行，
+	 * 然后"@@@@"数据库B交替进行备份
+	 */
+	volatile private boolean prevIsA = false;
+	
+	synchronized public void backupA() {
+		try {
+			while(prevIsA == true) {
+				wait(); //先前A备份，则A等待B备份
+			}
+			for(int i = 0; i < 5; i++) {
+				System.out.println("****");
+			}
+			prevIsA = true;
+			notifyAll();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+	
+	synchronized public void backupB() {
+		try {
+			while(prevIsA == false) {
+				wait();
+			}
+			for(int i = 0; i < 5; i++) {
+				System.out.println("@@@@");
+			}
+			prevIsA = false;
+			notifyAll();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class BackupA extends Thread{
+	private DBTools dbtools;
+	
+	public BackupA(DBTools dbtools) {
+		super();
+		this.dbtools = dbtools;
+	}
+	
+	@Override
+	public void run() {
+		dbtools.backupA();
+	}
+}
+
+
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class BackupB extends Thread{
+	private DBTools dbtools;
+	
+	public BackupB(DBTools dbtools) {
+		super();
+		this.dbtools = dbtools;
+	}
+	
+	@Override
+	public void run() {
+		dbtools.backupB();
+	}
+}
+
+
+package chapter03.section1.thread_3_1_14.project_1_wait_noify_insert_test;
+
+public class Run {
+
+	public static void main(String[] args) {
+		DBTools dbtools = new DBTools();
+		for(int i = 0; i < 20; i++) {
+			BackupB output = new BackupB(dbtools);
+			output.start();
+			BackupA input = new BackupA(dbtools);
+			input.start();
+		}
+	}
+}
+/*
+result:
+@@@@
+@@@@
+@@@@
+@@@@
+@@@@
+****
+****
+****
+****
+****
+@@@@
+@@@@
+@@@@
+@@@@
+@@@@
+交替运行
+*/
+结果分析:
+这个程序并没有利用好多线程优势，只是一个示例
+
+4. 方法join的使用
+在很多情况下，主线程创建并启动子线程，如果子线程中要进行大量的耗时运算(比如网络请
+求，下载数据、读写文件等)主线程往往将早于子线程结束之前结束。这时，如果主线程想等待
+子线程执行完之后再结束，比如子线程处理一个数据，主线程要取得这个数据中的值，就要用
+到join()方法了。方法join()的作用是等待线程对象销毁。
+
+方法join的作用是使所属的线程对象x正常执行run()方法中的任务，而使当前线程z进行无限期
+的阻塞，等待线程x销毁后(即线程的状态是TEMINATED)再继续执行线程z后面的代码
+join在内部使用wait()方法进行等待，而synchronized关键字使用的是"对象监视器"原理作为
+同步
+
+
+阅读JDK9文档
+join():
+public final void join​()
+                throws InterruptedException
+Waits for this thread to die.
+An invocation of this method behaves in exactly the same way as the invocation
+等待此线程死亡
+调用方法join()与调用join(0)作用完全相同
+
+join(0)
+Throws:
+InterruptedException - if any thread has interrupted the current thread. The 
+interrupted status of the current thread is cleared when this exception is thrown
+抛出:
+InterrupedException - 如果有任何线程中断了当前的线程。当这个异常被抛出，则当前线程
+的中断状态被清除
+
+
+join(long millis):
+public final void join​(long millis)
+                throws InterruptedException
+Waits at most millis milliseconds for this thread to die. A timeout of 0 means 
+to wait forever.
+This implementation uses a loop of this.wait calls conditioned on this.isAlive. 
+As a thread terminates the this.notifyAll method is invoked. It is recommended 
+that applications not use wait, notify, or notifyAll on Thread instances.
+最多等待调用此方法的线程死亡millis毫秒,0意味着永远等待。实现是使用一个调用wait(0)的循环
+while(isAlive){this.wait(0);}.当这个线程被终止之后释放锁，this.notifyAll通知线程来
+准备获得这个锁。建议应用程序不要在线程实例上使用等待、通知或notifyAll方法。
+
+Parameters:
+millis - the time to wait in milliseconds 最大等待的毫秒数
+Throws:
+IllegalArgumentException - if the value of millis is negative 
+如果millis是负数，那么抛出非法参数异常IllegalArgumentException
+InterruptedException - if any thread has interrupted the current thread. The 
+interrupted status of the current thread is cleared when this exception is thrown.
+如果任意线程中断了当前线程。那么抛出这个异常，同时当前线程的中断状态被清除
+
+
+
+(1) 学习方法join前的铺垫
+package chapter03.section2.thread_3_2_1.project_1_joinTest1;
+
+public class MyTest extends Thread {
+	
+	@Override
+	public void run() {
+		try {
+			int secondValue = (int)(Math.random() * 10000);
+			System.out.println(secondValue);
+			Thread.sleep(secondValue);
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_1.project_1_joinTest1;
+
+public class Test {
+	public static void main(String[] args) {
+		MyTest threadTest = new MyTest();
+		threadTest.start();
+		
+		// Thread.sleep(?)
+		System.out.println("我想当threadTest对象执行完毕后我再执行");
+		System.out.println("但上面代码中的sleep()中的值应该写多少呢？");
+		System.out.println("答案是：根据不能确定:)");	
+	}
+}
+结果分析:
+只需要修改Test.java类就可以解决
+package chapter03.section2.thread_3_2_2.project_1_joinTest2;
+
+public class Test {
+	public static void main(String[] args) throws InterruptedException{
+		MyTest threadTest = new MyTest();
+		threadTest.start();
+		
+		threadTest.join();
+		
+		// Thread.sleep(?)
+		System.out.println("我想当threadTest对象执行完毕后我再执行");
+		System.out.println("但上面代码中的sleep()中的值应该写多少呢？");
+		System.out.println("答案是：根据不能确定:)");	
+	}
+}
+/*
+result:
+8370
+我想当threadTest对象执行完毕后我再执行
+但上面代码中的sleep()中的值应该写多少呢？
+答案是：根据不能确定:)
+*/
+结果分析:
+join方法实现是通过wait.当main线程调用t.join时，main线程会获得线程对象t锁，
+调用该对象的wait(等待时间)，直到该对象唤醒main线程.这些具体代码设计到JVM
+低层实现，由于本人对C++不太熟，也暂时没有学习计划，对于这块感兴趣的可以去看
+OpenJdk 源码: http://openjdk.java.net/
+
+(2) 方法join与异常
+在join过程中，如果当前线程对象被中断，则当前线程出现异常
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class ThreadA extends Thread {
+	
+	@Override
+	public void run() {
+		for(int i = 0; i < Integer.MAX_VALUE; i++) {
+			String newString = new String();
+			Math.random();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class ThreadB extends Thread{
+	
+	@Override
+	public void run() {
+		try {
+			ThreadA a = new ThreadA();
+			a.start();
+			a.join();
+			
+			System.out.println("线程B在run end处打印了");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			System.out.println("线程B在catch处打印了");
+			e.printStackTrace();
+		}
+	}
+
+}
+
+
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class ThreadC extends Thread {
+	
+	private ThreadB threadB;
+	
+	public ThreadC(ThreadB threadB) {
+		super();
+		this.threadB = threadB;
+	}
+	
+	@Override
+	public void run() {
+		threadB.interrupt();
+	}
+}
+
+
+package chapter03.section2.thread_3_2_3.project_1_joinException;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		try {
+			ThreadB b = new ThreadB();
+			b.start();
+			
+			Thread.sleep(500);
+			
+			ThreadC c = new ThreadC(b);
+			c.start();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+线程B在catch处打印了
+java.lang.InterruptedException
+	at java.base/java.lang.Object.wait(Native Method)
+	at java.base/java.lang.Thread.join(Unknown Source)
+	at java.base/java.lang.Thread.join(Unknown Source)
+	at chapter03.section2.thread_3_2_3.project_1_joinException.ThreadB.run(ThreadB.java:10)
+*/
+结果分析:
+可以看到线程B调用了join()方法，并且被C线程中断，抛出了InterruptedException
+异常，但是A线程并没有出现异常，是正常执行的状态。
+
+
+
+(3) 方法join(long)的使用
+方法join(long)中的参数是设定等待的时间
+package chapter03.section2.thread_3_2_4.project_1_joinLong;
+
+public class MyThread extends Thread {
+	@Override
+	public void run() {
+		try {
+			System.out.println("begin Timer=" + System.currentTimeMillis());
+			Thread.sleep(5000);
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_4.project_1_joinLong;
+
+public class Test extends Thread{
+	
+	public static void main(String[] args) {
+		try {
+			MyThread threadTest = new MyThread();
+			threadTest.start();
+			
+			threadTest.join(2000); //只等待2秒
+//			Thread.sleep(2000);
+			
+			System.out.println("  end Timer=" + System.currentTimeMillis());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+begin Timer=1540606857302
+  end Timer=1540606859304
+*/
+可以看到大约2秒后主线程开始执行，执行结束之后回到另一个线程继续执行3秒
+
+
+
+(4) 方法join(long)与sleep(long的区别)
+方法join(long)的功能在内部是是使用wait(long)方法来实现的，所以join(long)方
+法具有释放锁的特点。
+
+
+下面是实现的源码(不包含JVM实现部分):
+
+sleep(long millis):
+/**
+ * Causes the currently executing thread to sleep (temporarily cease
+ * execution) for the specified number of milliseconds, subject to
+ * the precision and accuracy of system timers and schedulers. The thread
+ * does not lose ownership of any monitors.
+ *
+ * @param  millis
+ *         the length of time to sleep in milliseconds
+ *
+ * @throws  IllegalArgumentException
+ *          if the value of {@code millis} is negative
+ *
+ * @throws  InterruptedException
+ *          if any thread has interrupted the current thread. The
+ *          <i>interrupted status</i> of the current thread is
+ *          cleared when this exception is thrown.
+ */
+public static native void sleep(long millis) throws InterruptedException;
+可以看到这个方法是native方法，大家可以自己去OpenJDK查看C++代码，这里有机会以后分析。
+sleep(long millis)造成当前线程休眠(暂时停止执行)一段特定的时间，取决于当前系统时钟
+和调度器的精度和准确度。这个线程不释放任何监视器的所有权。
+
+
+wait(long millis):
+/**
+ * Waits at most {@code millis} milliseconds for this thread to
+ * die. A timeout of {@code 0} means to wait forever.
+ *
+ * <p> This implementation uses a loop of {@code this.wait} calls
+ * conditioned on {@code this.isAlive}. As a thread terminates the
+ * {@code this.notifyAll} method is invoked. It is recommended that
+ * applications not use {@code wait}, {@code notify}, or
+ * {@code notifyAll} on {@code Thread} instances.
+ *
+ * @param  millis
+ *         the time to wait in milliseconds
+ *
+ * @throws  IllegalArgumentException
+ *          if the value of {@code millis} is negative
+ *
+ * @throws  InterruptedException
+ *          if any thread has interrupted the current thread. The
+ *          <i>interrupted status</i> of the current thread is
+ *          cleared when this exception is thrown.
+ */
+public final synchronized void join(long millis)
+throws InterruptedException {
+    long base = System.currentTimeMillis();
+    long now = 0;
+
+    if (millis < 0) {
+        throw new IllegalArgumentException("timeout value is negative");
+    }
+
+    if (millis == 0) {
+        while (isAlive()) {
+            wait(0); 
+        }
+    } else {
+        while (isAlive()) {
+            long delay = millis - now;
+            if (delay <= 0) {
+                break;
+            }
+            wait(delay); 
+            now = System.currentTimeMillis() - base;
+        }
+    }
+}
+其中wait()与wait(long timeout)是native方法，可以看到
+millis为负数抛出非法参数异常
+millis为0，永远等待，直到其他线程isAlive()为false,调用join方法的当前线程拿到锁，
+然后就可以继续执行了
+millis为正，则调用wait(delay)方法延迟时间到了自动唤醒调用join方法线程，然后执行
+当前线程。
+
+
+
+验证Thread.sleep(long)方法不释放锁
+package chapter03.section2.thread_3_2_5.project_1_join_sleep_1;
+
+public class ThreadA extends Thread {
+	
+	private ThreadB b;
+	
+	public ThreadA(ThreadB b) {
+		super();
+		this.b = b;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			synchronized(b) {
+				b.start();
+				Thread.sleep(6000);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_5.project_1_join_sleep_1;
+
+public class ThreadB extends Thread{
+
+	@Override
+	public void run() {
+		try {
+			System.out.println("   b run begin timer="
+					+ System.currentTimeMillis());
+			Thread.sleep(5000);
+			System.out.println("   b run   end timer="
+					+ System.currentTimeMillis());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+
+	synchronized public void bService() {
+		System.out.println("打印了bService timer=" + System.currentTimeMillis());
+	}
+}
+
+
+package chapter03.section2.thread_3_2_5.project_1_join_sleep_1;
+
+public class ThreadC extends Thread {
+	
+	private ThreadB threadB;
+
+	public ThreadC(ThreadB threadB) {
+		super();
+		this.threadB = threadB;
+	}
+
+	@Override
+	public void run() {
+		threadB.bService();
+	}
+}
+
+
+package chapter03.section2.thread_3_2_5.project_1_join_sleep_1;
+
+public class Run {
+	
+	public static void main(String[] args) {
+
+		try {
+			ThreadB b = new ThreadB();
+
+			ThreadA a = new ThreadA(b);
+			a.start();
+
+			Thread.sleep(1000);
+
+			ThreadC c = new ThreadC(b);
+			c.start();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+   b run begin timer=1540608282186
+   b run   end timer=1540608287194
+打印了bService timer=1540608288190
+*/
+结果分析:
+线程ThreadA一开始运行持有ThreadB对象的锁，时间是6秒多，所以线程ThreadC只有在
+ThreadA时间到达6秒后run方法执行结束释放ThreadB的锁时，才可以调用ThreadB中的
+同步方法ysynchronized public void bService()方法。
+
+
+
+验证join()方法释放锁的特点
+修改上面中的ThreadA.java
+package chapter03.section2.thread_3_2_5.project_1_join_sleep_1;
+
+public class ThreadA extends Thread {
+	
+	private ThreadB b;
+	
+	public ThreadA(ThreadB b) {
+		super();
+		this.b = b;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			synchronized(b) {
+				b.start();
+				b.join(); //说明join释放锁了
+				for (int i = 0; i < Integer.MAX_VALUE; i++) {
+					String newString = new String();
+					Math.random();
+				}
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+   b run begin timer=1540608854468
+打印了bService timer=1540608855473
+   b run   end timer=1540608859481
+*/
+ThreadA调用了join，释放了ThreadB对象锁，所以线程ThreadC拿到锁可以调用ThreadB
+中的同步方法bService()
+
+
+
+方法join()后面的代码提前运行: 出现以外
+举个例子:
+package chapter03.section2.thread_3_2_6.project_1_joinMoreTest;
+
+public class ThreadA extends Thread{
+	private ThreadB b;
+	
+	public ThreadA(ThreadB b) {
+		super();
+		this.b = b;
+	}
+	
+	@Override
+	public void run() {
+		try {
+			synchronized(b) {
+				System.out.println("begin A ThreadName="
+						+ Thread.currentThread().getName() + "  "
+						+ System.currentTimeMillis());
+				Thread.sleep(5000);
+				System.out.println("  end A ThreadName="
+						+ Thread.currentThread().getName() + "  "
+						+ System.currentTimeMillis());
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_6.project_1_joinMoreTest;
+
+public class ThreadB extends Thread {
+	@Override
+	synchronized public void run() {
+		try {
+			System.out.println("begin B ThreadName="
+					+ Thread.currentThread().getName() + "  "
+					+ System.currentTimeMillis());
+			Thread.sleep(5000);
+			System.out.println("  end B ThreadName="
+					+ Thread.currentThread().getName() + "  "
+					+ System.currentTimeMillis());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section2.thread_3_2_6.project_1_joinMoreTest;
+
+public class Run1 {
+	public static void main(String[] args) {
+			ThreadB b = new ThreadB();
+			ThreadA a = new ThreadA(b);
+			a.start();
+			b.start();
+			System.out.println("                    main end "
+					+ System.currentTimeMillis());
+	}
+}
+/*
+result3:
+                    main end 1540622542511
+begin A ThreadName=Thread-1  1540622542511
+  end A ThreadName=Thread-1  1540622547512
+begin B ThreadName=Thread-0  1540622547512
+  end B ThreadName=Thread-0  1540622552517
+ */
+
+
+package chapter03.section2.thread_3_2_6.project_1_joinMoreTest;
+
+public class RunFirst {
+
+	public static void main(String[] args) throws InterruptedException {
+		ThreadB b = new ThreadB();
+		ThreadA a = new ThreadA(b);
+		a.start();
+		b.start();
+		b.join(2000);
+		System.out.println("   main end=" + System.currentTimeMillis());
+	}
+}
+/*
+result1:
+begin B ThreadName=Thread-0  1540621815361
+  end B ThreadName=Thread-0  1540621820366
+   main end=1540621820366
+begin A ThreadName=Thread-1  1540621820366
+  end A ThreadName=Thread-1  1540621825376
+result2:
+begin A ThreadName=Thread-1  1540621971188
+  end A ThreadName=Thread-1  1540621976192
+   main end=1540621976192
+begin B ThreadName=Thread-0  1540621976192
+  end B ThreadName=Thread-0  1540621981197
+*/
+结果分析:
+多次运行Run1,发现main end往往都是第一个打印的，因此可以推断一个结论:在
+RunFirst中,方法join(2000)大部分是先运行的，也就是先抢到ThreadB的锁，然后快
+速进行释放
+result1执行过程:
+1) b.join(2000)方法主线程先抢到B锁，然后将B锁进行释放
+2) ThreadB线程拿到ThreadB对象的锁然后执行同步方法
+3) 5秒过后，ThreadB线程执行完毕释放ThreadB对象锁，join(2000)两秒过后主线程
+被通知一直在等待锁，但是锁被B一直拿着，因此现在要和ThreadA争抢锁，主线程抢到
+锁之后继续执行wait(2000)后的代码，发现超时3秒小于0，因此跳出while循环，执行
+main end.然后ThreadA抢到锁执行run方法
+result2执行过程省略
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

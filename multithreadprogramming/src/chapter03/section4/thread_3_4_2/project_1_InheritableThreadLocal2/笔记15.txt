@@ -1,0 +1,514 @@
+5.类ThreadLocal的使用
+变量值的共享可以使用public static变量的形式，所有的线程都使用同一个public 
+static 变量。但是如何让每一个线程都有自己的共享变量该如何解决呢?JDK中提供了
+ThreadLocal类来解决这样的问题、
+ThreadLocal主要作用: 
+	每个线程绑定自己的值，可以将ThreadLocal类比喻成全局
+存放数据的盒子，盒子中可以存储每个线程的私有数据。类Threadlocal解决的是变量
+在不同线程间的隔离性，也就是不同线程拥有自己的值，不同线程中的值是可以放入
+ThreadLocal类中进行保存的。
+
+
+(1)ThreadLocal类及其方法文档翻译:
+
+public class ThreadLocal<T>
+extends Object
+This class provides thread-local variables. These variables differ from 
+their normal counterparts in that each thread that accesses one (via 
+its get or set method) has its own, independently initialized copy of 
+the variable. ThreadLocal instances are typically private static fields 
+in classes that wish to associate state with a thread (e.g., a user ID 
+or Transaction ID).
+For example, the class below generates unique identifiers local to each 
+thread. A thread's id is assigned the first time it invokes ThreadId.get() 
+and remains unchanged on subsequent calls.
+这个类提供线程局部变量。每个线程通过get或set方法访问他自己的变量。独立的初始化变量
+的拷贝。ThreadLocal实例通常是类中的私有的静态字段，在希望将状态与线程关联的类(例如,
+用户ID)
+例如，下面的类为每一个线程生成唯一的本地标识符。线程id在第一次调用ThreadId.get()
+时被分配并在随后的通话中保持不变
+
+ import java.util.concurrent.atomic.AtomicInteger;
+
+ public class ThreadId {
+     // Atomic integer containing the next thread ID to be assigned
+     /*
+     在这里需要注意的是:
+     final修饰的量视为常量
+     当使用final修饰一个变量时，是指其引用的对象不变，而不是引用对象指定的内容。
+     也是固定了栈内存的引用reference不变，不是修饰堆内存的内容。
+     */
+     private static final AtomicInteger nextId = new AtomicInteger(0);
+
+     // Thread local variable containing each thread's ID
+     private static final ThreadLocal<Integer> threadId =
+         new ThreadLocal<Integer>() {
+             @Override protected Integer initialValue() {
+                 return nextId.getAndIncrement();
+         }
+     };
+
+     // Returns the current thread's unique ID, assigning it if necessary
+     public static int get() {
+         return threadId.get();
+     }
+ }
+ 上面的代码很有实际意义，比如说你要为每个生成的会话生成不重复指定长度和格式的唯一ID，
+ 就可以参考上面代码
+ 每个线程调用此类的静态方法get(),由于事先没有调用set()方法，因此返回的就是initialValue()
+ 方法返回的值，多次调用get()方法返回的也是这个默认值(虽然nextId对象的value字段属性值在发生变化
+ ，但是threadId包含对应线程的拷贝)
+
+ 
+Each thread holds an implicit reference to its copy of a thread-local 
+variable as long as the thread is alive and the ThreadLocal instance 
+is accessible; after a thread goes away, all of its copies of thread-local 
+instances are subject to garbage collection (unless other references to 
+these copies exist).
+每个线程都有一个对其线程本地变量的引用，只要线程是存活的，并且ThreadLocal实例可以
+访问;在一个线程死亡之后，所有的它的线程局部实例拷贝由垃圾回收处理。除非这些拷贝还有
+还有其他的引用存在。
+
+
+T initialValue():
+protected T initialValue​()
+Returns the current thread's "initial value" for this thread-local
+variable. This method will be invoked the first time a thread 
+accesses the variable with the get() method, unless the thread 
+previously invoked the set(T) method, in which case the initialValue 
+method will not be invoked for the thread. Normally, this method is 
+invoked at most once per thread, but it may be invoked again in case 
+of subsequent invocations of remove() followed by get().This implementation 
+simply returns null; if the programmer desires thread-local variables 
+to have an initial value other than null, ThreadLocal must be subclassed, 
+and this method overridden. Typically, an anonymous inner class will be used.
+
+Returns:
+the initial value for this thread-local
+为这个线程局部变量返回当前线程的"初始值"。这个方法将在第一个使用get()方法访问
+变量时调用，除非这个线程之前调用过set(T)方法，在这种情况下不会为线程调用
+initialValue方法。通常，该方法在每个线程中最多调用一次，但在随后调用remove()
+和get()时，可能会再次调用该方法。这个实现只返回null;如果程序员希望线程局部变
+量有一个初始值而不是null,ThreadLocal类必须子类化，并且这个方法被重写。通常，
+使用匿名内部类来实现。
+
+
+set(T value):
+public void set​(T value)
+Sets the current thread's copy of this thread-local variable to the 
+specified value. Most subclasses will have no need to override this 
+method, relying solely on the initialValue() method to set the values 
+of thread-locals.
+Parameters:
+value - the value to be stored in the current thread's copy of this 
+thread-local.
+将当前线程的线程局部变量的拷贝设置成特定的值。大多数子类都不需要重写这个方法。
+仅单独的依赖于initialValue()方法来设置线程局部变量的值
+
+
+T get():
+public T get​()
+Returns the value in the current thread's copy of this thread-local 
+variable. If the variable has no value for the current thread, it is 
+first initialized to the value returned by an invocation of the 
+initialValue() method.
+Returns:
+the current thread's value of this thread-local
+返回当前线程的关于线程本地变量的拷贝值。如果变量没有当前线程的值，它是调用
+initialValue()方法返回的值。通过initialValue()可以设置默认值。
+
+
+remove():
+public void remove​()
+Removes the current thread's value for this thread-local variable. 
+If this thread-local variable is subsequently read by the current thread, 
+its value will be reinitialized by invoking its initialValue() method, 
+unless its value is set by the current thread in the interim. This may 
+result in multiple invocations of the initialValue method in the current thread.
+删除当前线程的的线程本地变量的值。如果这个线程局部变量随后被当前线程读取，它
+的值将通过调用它的initialValue()方法重新初始化。除非他的值是当前线程在get之前
+设置的。这可能导致在当前线程中多次调用initialValue方法。
+
+
+(2) 方法get()与null
+
+举个例子:
+package chapter03.section3.thread_3_3_1.project_1_ThreadLocal11;
+
+public class Run {
+	public static ThreadLocal<String> t1 = new ThreadLocal<>();
+	public static void main(String[] args) {
+		if(t1.get() == null) {
+			System.out.println("从未放过值");
+			t1.set("我的值");
+		}
+		System.out.println(t1.get());
+		System.out.println(t1.get());
+	}
+	
+}
+/**
+result:
+从未放过值
+我的值
+我的值
+*/
+
+
+(3) 验证线程变量的隔离性及设置get()返回的默认值
+举例1验证隔离性:
+package chapter03.section3.thread_3_3_2.project_1_ThreadLocalTest;
+
+public class Tools {
+	public static ThreadLocal<String> t1 = new ThreadLocal<>();
+}
+
+
+package chapter03.section3.thread_3_3_2.project_1_ThreadLocalTest;
+
+public class ThreadA extends Thread {
+
+	@Override
+	public void run() {
+		try {
+			for(int i = 0; i < 100; i++) {
+				if(Tools.t1.get() == null) {
+					Tools.t1.set("ThreadA" + (i + 1));
+				} else {
+					System.out.println("ThreadA get Value=" + Tools.t1.get());
+				}
+				Thread.sleep(200);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section3.thread_3_3_2.project_1_ThreadLocalTest;
+
+public class ThreadB extends Thread {
+
+	@Override
+	public void run() {
+		try {
+			for (int i = 0; i < 100; i++) {
+				if (Tools.t1.get() == null) {
+					Tools.t1.set("ThreadB" + (i + 1));
+				} else {
+					System.out.println("ThreadB get Value=" + Tools.t1.get());
+				}
+				Thread.sleep(200);
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section3.thread_3_3_2.project_1_ThreadLocalTest;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			ThreadA a = new ThreadA();
+			ThreadB b = new ThreadB();
+			a.start();
+			b.start();
+			
+			for(int i = 0; i < 100; i++) {
+				if(Tools.t1.get() == null) {
+					Tools.t1.set("Main" + (i + 1));
+				} else {
+					System.out.println("Main get Value=" + Tools.t1.get());
+				}
+				Thread.sleep(200);
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+..........................
+ThreadB get Value=ThreadB1
+ThreadA get Value=ThreadA1
+Main get Value=Main1
+ThreadB get Value=ThreadB1
+ThreadA get Value=ThreadA1
+Main get Value=Main1
+ThreadB get Value=ThreadB1
+ThreadA get Value=ThreadA1
+Main get Value=Main1
+ThreadA get Value=ThreadA1
+ThreadB get Value=ThreadB1
+..........................
+*/
+结果分析:
+可以看到主线程、ThreadB、TheadA获得的值都是他们自己设置的值
+,并且只需要设置一次，不调用remove()方法，则总会得到相同的值
+重新设置值，得到的值就会变更
+
+
+举例2改变get()获得的默认值:
+package chapter03.section3.thread_3_3_3.project_1_ThreadLocal22;
+
+public class ThreadLocalExt extends ThreadLocal<String>{
+	@Override
+	protected String initialValue() {
+		return "我是默认值, 第一次get不再为null";
+	}
+}
+
+
+package chapter03.section3.thread_3_3_3.project_1_ThreadLocal22;
+
+public class Run {
+	public static ThreadLocalExt t1= new ThreadLocalExt();
+	public static ThreadLocal<String> t2 = new ThreadLocal<>() {
+		@Override 
+		protected String initialValue() {
+			return "t2";
+		}
+	};
+	
+	public static void main(String[] args) {
+		if(t1.get() == null) {
+			System.out.println("从未放过值");
+			t1.set("我的值");
+		}
+		System.out.println(t1.get());
+		System.out.println(t1.get());
+		System.out.println(t2.get());
+		System.out.println(t2.get());
+	}
+}
+/*
+result:
+我是默认值, 第一次get不再为null
+我是默认值, 第一次get不再为null
+t2
+t2
+*/
+结果分析:
+我们介绍了两种方法来设置默认值
+
+
+举例3再次验证子线程和父线程变量的隔离性
+package chapter03.section3.thread_3_3_4.project_1_ThreadLocal33;
+
+import java.util.Date;
+
+public class ThreadLocalExt extends ThreadLocal<Date> {
+	@Override
+	protected Date initialValue() {
+		return new Date();
+	}
+}
+
+
+package chapter03.section3.thread_3_3_4.project_1_ThreadLocal33;
+
+import java.util.Date;
+
+public class Tools {
+	public static ThreadLocalExt t1 = new ThreadLocalExt();
+}
+
+
+package chapter03.section3.thread_3_3_4.project_1_ThreadLocal33;
+
+public class ThreadA extends Thread {
+
+	@Override
+	public void run() {
+		try {
+			for (int i = 0; i < 3; i++) {
+				System.out.println("在ThreadA线程中取值=" + Tools.t1.get().getTime());
+				Thread.sleep(100);
+			}
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+
+}
+
+
+package chapter03.section3.thread_3_3_4.project_1_ThreadLocal33;
+
+
+public class Run {
+
+	public static void main(String[] args) {
+		try {
+			for (int i = 0; i < 3; i++) {
+				System.out.println("       在Main线程中取值=" + Tools.t1.get().getTime());
+				Thread.sleep(100);
+			}
+			Thread.sleep(5000);
+			ThreadA a = new ThreadA();
+			a.start();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+       在Main线程中取值=1540643528940
+       在Main线程中取值=1540643528940
+       在Main线程中取值=1540643528940
+在ThreadA线程中取值=1540643534260
+在ThreadA线程中取值=1540643534260
+在ThreadA线程中取值=1540643534260
+*/
+
+
+(4) 类InheritableThreadLocal的使用
+使用类InheritableThreadLocal可以在子线程中取得父线程继承下来的值
+
+文档翻译:
+public class InheritableThreadLocal<T>
+extends ThreadLocal<T>
+This class extends ThreadLocal to provide inheritance of values from 
+parent thread to child thread: when a child thread is created, the 
+child receives initial values for all inheritable thread-local 
+variables for which the parent has values. Normally the child's 
+values will be identical to the parent's; however, the child's value
+can be made an arbitrary function of the parent's by overriding 
+the childValue method in this class.
+Inheritable thread-local variables are used in preference to ordinary 
+thread-local variables when the per-thread-attribute being maintained 
+in the variable (e.g., User ID, Transaction ID) must be automatically 
+transmitted to any child threads that are created.
+这个类继承了ThreadLocal类，以提供从父线程到子线程继承的值: 当创建子线程时，
+子线程接受从父线程继承下来的所有线程局部变量作为初始值。通常子线程的值将与
+父线程相同；然而，子线程可以通过覆盖类中的childValue()方法来设置。
+
+Note: During the creation of a new thread, it is possible to opt out 
+of receiving initial values for inheritable thread-local variables.
+
+
+T childValue(T parentVaue):
+protected T childValue​(T parentValue)
+Computes the child's initial value for this inheritable thread-local 
+variable as a function of the parent's value at the time the child 
+thread is created. This method is called from within the parent thread 
+before the child is started.
+This method merely returns its input argument, and should be overridden 
+if a different behavior is desired.
+
+Parameters:
+parentValue - the parent thread's value
+Returns:
+the child thread's initial value
+
+
+
+举例1值继承:
+package chapter03.section4.thread_3_4_1.project_1_InheritableThreadLocal1;
+
+import java.util.Date;
+
+public class InheritableThreadLocalExt extends InheritableThreadLocal<Date> {
+	@Override
+	protected Date initialValue() {
+		return new Date();
+	}
+}
+
+
+package chapter03.section4.thread_3_4_1.project_1_InheritableThreadLocal1;
+
+public class Tools {
+	public static InheritableThreadLocalExt t1 = new InheritableThreadLocalExt();
+}
+
+
+package chapter03.section4.thread_3_4_1.project_1_InheritableThreadLocal1;
+
+public class ThreadA extends Thread {
+
+	@Override
+	public void run() {
+		try {
+			for (int i = 0; i < 3; i++) {
+				System.out.println("在ThreadA线程中取值=" + Tools.t1.get().getTime());
+				Thread.sleep(100);
+			}
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter03.section4.thread_3_4_1.project_1_InheritableThreadLocal1;
+
+
+public class Run {
+
+	public static void main(String[] args) {
+		try {
+			for (int i = 0; i < 3; i++) {
+				System.out.println("       在Main线程中取值=" + Tools.t1.get().getTime());
+				Thread.sleep(100);
+			}
+			Thread.sleep(5000);
+			ThreadA a = new ThreadA();
+			a.start();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+       在Main线程中取值=1540644910398
+       在Main线程中取值=1540644910398
+       在Main线程中取值=1540644910398
+在ThreadA线程中取值=1540644910398
+在ThreadA线程中取值=1540644910398
+在ThreadA线程中取值=1540644910398
+*/
+结果分析:
+我们翻译可以看到继承父线程下来的变量优先，所以此处结果一样。
+
+
+举例2值继承再修改
+如果在继承的同时还可以对值进行进一步的处理那就更好了
+更改类InheritableThreadLocalExt.java
+package chapter03.section4.thread_3_4_2.project_1_InheritableThreadLocal2;
+
+import java.util.Date;
+
+public class InheritableThreadLocalExt extends InheritableThreadLocal<Date> {
+	@Override
+	protected Date initialValue() {
+		return new Date();
+	}
+	
+	@Override
+	protected Date childValue(Date parentValue) {
+		return new Date(); //重新改变时间
+	}
+}
+/*
+result:
+       在Main线程中取值=1540645502906
+       在Main线程中取值=1540645502906
+       在Main线程中取值=1540645502906
+在ThreadA线程中取值=1540645508211
+在ThreadA线程中取值=1540645508211
+在ThreadA线程中取值=1540645508211
+*/
+ 
+
