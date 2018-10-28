@@ -1,0 +1,620 @@
+存放数据的盒子，盒子中可以存储每个线程的私有数据。类Threadlocal解决的是变量
+第四章
+Lock的使用
+内容:
+Java5中的Lock对象也能实现同步的效果，而且在使用上也更加方便。
+本章主要掌握以下两个知识点:
+1) ReentrantLock的使用
+2) ReentrantReadWriteLock类的使用
+
+1.使用ReentrantLock类
+在Java多线程中，可以使用synchronized(重量锁)关键字来实现线程之间的同步互斥，但在
+JDK1.5中新增加了ReentrantLock(轻量锁)类也能达到同样的效果，并且在扩展功能上也更加
+强大，比如具有嗅探锁定，多路分支通知等。在中等或更高负荷下，ReentrantLock
+有更好的性能,并且拥有可轮询和可定时的请求锁等高级功能。
+重入锁ReentrantLock:
+	也叫作递归锁，顾名思义，就是支持重新进入的锁，它表示该锁能够支持一个线
+程对资源的重复加锁，用于占有锁的线程再次获取锁的场景。同一线程中某个外层函数
+获得锁之后，其内层代码再次获取该锁，形成递归调用，而不受影响。
+
+
+(1) 文档翻译(Lock接口和ReentrantLock类及lock()、unlock()方法)
+翻译中其实也介绍了重入锁与synchronized加锁的区别
+
+ReentrantLock类
+public class ReentrantLock
+extends Object
+implements Lock, Serializable 可以看到此类实现了Lock及Serializable序列化接口
+A reentrant mutual exclusion Lock with the same basic behavior and semantics as 
+the implicit monitor lock accessed using synchronized methods and statements,
+but with extended capabilities.
+A ReentrantLock is owned by the thread last successfully locking, but not yet 
+unlocking it. A thread invoking lock will return, successfully acquiring the 
+lock, when the lock is not owned by another thread. The method will return 
+immediately if the current thread already owns the lock. This can be checked 
+using methods isHeldByCurrentThread(), and getHoldCount().
+与使用同步方法和语句访问的隐式监视器锁相同的基本行为和语义的可重入互斥锁。但具有可拓展
+能力。ReentrantLock对象是由最后一次成功锁定，但尚未解锁它的线程拥有的.当锁没有被其他
+线程拥有的时候，一个线程通过调用lock()方法来成功获得锁。当前锁是否被别的线程锁拥有
+可以使用isHeldByCurrentThread()和getHoldCount()进行检查。
+
+The constructor for this class accepts an optional fairness parameter. When set 
+true, under contention, locks favor granting access to the longest-waiting 
+thread. Otherwise this lock does not guarantee any particular access order. 
+Programs using fair locks accessed by many threads may display lower overall 
+throughput (i.e., are slower; often much slower) than those using the default 
+setting, but have smaller variances in times to obtain locks and guarantee lack 
+of starvation. Note however, that fairness of locks does not guarantee fairness 
+of thread scheduling. Thus, one of many threads using a fair lock may obtain it 
+multiple times in succession while other active threads are not progressing and 
+not currently holding the lock. Also note that the untimed tryLock() method does 
+not honor the fairness setting. It will succeed if the lock is available even if 
+other threads are waiting.
+此类的构造函数接受可选的公平性参数。如果设置为true,在"争用"情况下，锁将更支持给最长等待
+时间的线程。否则，此锁不保证任任何特定的访问顺序。使用由多线程访问的公平锁的程序可能会显示
+较低的总体吞吐量(即，速度较慢;通常要慢的多),而不是使用默认的设置(即，默认情况下不指定
+默认是非公平锁)，但有时会有较小的差异来获取锁并保证缺乏饥饿。但注意，公平锁并不保证线程调度
+的公平性。因此，多线程中使用公平锁中的一个线程可以连续多次获得这个锁，而其他存活的线程没有
+进展，并且当前不持有锁。另外要注意的是，tryLock()方法不尊重公平性的设置。如果锁可用，即使
+其他线程正在等待，它也会成功
+
+It is recommended practice to always immediately follow a call to lock with a try
+block, most typically in a before/after construction such as:
+建议的做法总是立即用try-catch代码块在构造之前之后加入，例如:
+
+ 
+ class X {
+   private final ReentrantLock lock = new ReentrantLock();
+   // ...
+
+   public void m() {
+     lock.lock();  // block until condition holds
+     try {
+       // ... method body
+     } finally {
+       lock.unlock()
+     }
+   }
+ }
+In addition to implementing the Lock interface, this class defines a number 
+of public and protected methods for inspecting the state of the lock. Some 
+of these methods are only useful for instrumentation and monitoring.
+此类除了实现锁接口，此类还定义了许多公有和受保护的方法来检查锁的状态。其中一些方法
+仅适用于检测和监控。
+
+Serialization of this class behaves in the same way as built-in locks: a 
+deserialized lock is in the unlocked state, regardless of its state when serialized.
+此类的序列化行为方式与内置锁相同: 反序列化的锁处于"未锁定"的状态，而不管其被序列化时的状态。
+
+This lock supports a maximum of 2147483647 recursive locks by the same 
+thread. Attempts to exceed this limit result in Error throws from locking methods.
+此锁最多支持同一线程重入这么多次，尝试超过次限制将导致从锁定方法引发错误。
+
+Since:
+1.5
+
+
+Constructors:
+ReentrantLock():
+Creates an instance of ReentrantLock
+创建一个重入锁实例，默认是非公平锁
+ReentrantLock(boolean fair):
+Creates an instance of ReentrantLock with the given fairness policy.
+创建一个给定公平政策的重入锁实例
+
+
+lock():
+public void lock​()
+Acquires the lock.
+Acquires the lock if it is not held by another thread and returns immediately, 
+setting the lock hold count to one.
+获取锁.
+如果它没有被另一个线程所持有，那么获得这个锁，并且立即返回。将锁计数器设置为1
+
+
+If the current thread already holds the lock then the hold count is incremented
+by one and the method returns immediately.
+如果当前线程已经持有锁，则锁计数器加1，该方法立即返回。
+
+If the lock is held by another thread then the current thread becomes disabled 
+for thread scheduling purposes and lies dormant until the lock has been acquired, 
+at which time the lock hold count is set to one.
+如果锁由另一个线程持有，则当前线程将被禁用以线程调度，并且在获取锁之前处于休眠状态，此时
+锁定保留计数设置为1.(其实是在阻塞队列中)
+
+unlock():
+public void unlock​()
+Attempts to release this lock.
+If the current thread is the holder of this lock then the hold count is decremented. 
+If the hold count is now zero then the lock is released. If the current thread 
+is not the holder of this lock then IllegalMonitorStateException is thrown.
+尝试释放当前锁
+如果当前线程是此锁的持有者，则保留计数器将-1.如果锁计数器为0，则释放锁。如果当前线程不是此
+锁的持有者，则抛出IllegalMonitorStateException异常。
+
+
+Specified by:
+unlock in interface Lock
+Throws:
+IllegalMonitorStateException - if the current thread does not hold this lock
+抛出IlleagalMonitorStateException - 如果当前线程并不持有锁
+
+
+Lock接口:
+public interface Lock
+Lock implementations provide more extensive locking operations than can be obtained 
+using synchronized methods and statements. They allow more flexible structuring, 
+may have quite different properties, and may support multiple associated Condition 
+objects.
+A lock is a tool for controlling access to a shared resource by multiple threads. 
+Commonly, a lock provides exclusive access to a shared resource: only one thread 
+at a time can acquire the lock and all access to the shared resource requires that 
+the lock be acquired first. However, some locks may allow concurrent access to a 
+shared resource, such as the read lock of a ReadWriteLock.
+Lock实现提供比使用synchronized方法和语句块更加广泛的锁操作。它们允许更灵活的结构，可能
+具有完全不同的属性，并且可能支持多个关联的条件对象。
+锁是在多线程中用来控制对共享资源的访问的一种工具。通常，锁提供一种排它的对共享资源的独占访问
+(但是还有读写锁，读写排它，其他不排斥);同一时间只有一个线程可以获得这个锁，并且对共享资源的
+所有访问都要求首先获取锁。但是，某些锁可能允许并发访问共享资源,如ReadWriteLock的读锁定。
+
+The use of synchronized methods or statements provides access to the implicit 
+monitor lock associated with every object, but forces all lock acquisition 
+and release to occur in a block-structured way: when multiple locks are 
+acquired they must be released in the opposite order, and all locks must 
+be released in the same lexical scope in which they were acquired.
+使用同步synchronized方法或语句块可以访问与每个对象关联的隐式监视器锁。但强制
+所有锁的捕获和释放以块结构方式发生:在获取多个锁时，必须在相反的顺序释放。并且所有锁
+必须在其获取的同一词法范围内释放。
+
+While the scoping mechanism for synchronized methods and statements makes 
+it much easier to program with monitor locks, and helps avoid many common 
+programming errors involving locks, there are occasions where you need to 
+work with locks in a more flexible way. For example, some algorithms for 
+traversing concurrently accessed data structures require the use of 
+"hand-over-hand" or "chain locking": you acquire the lock of node A, 
+then node B, then release A and acquire C, then release B and acquire 
+D and so on. Implementations of the Lock interface enable the use of 
+such techniques by allowing a lock to be acquired and released in different 
+scopes, and allowing multiple locks to be acquired and released in any order.
+虽然同步方法和同步语句块的作用域机制(就是花括号)使使用监视器锁进行编程变得更加容易，
+并且有助于避免涉及锁的许多常见编程错误，但有时需要使用更灵活的方式来处理锁。例如,一些
+遍历并发访问数据结构的算法需要使用"手动"或"链锁定": 获取节点a的锁，然后是节点B，然后释放
+a并获取C,然后释放B并且D等等。(但是synchronized难以实现)。锁接口的实现通过允许在不同的
+作用域中获取和释放锁，并允许以任何顺序获取和释放多个锁，从而允许使用此类技术。
+
+
+With this increased flexibility comes additional responsibility. The absence 
+of block-structured locking removes the automatic release of locks that 
+occurs with synchronized methods and statements. In most cases, the 
+following idiom should be used:
+随着灵活性的增加，来了更多的责任。缺少块结构锁定移除了synchronized方法或语句块会自动
+获得和释放锁的能力。在大多数情况下，应使用一下习语:
+
+ 
+ Lock l = ...;
+ l.lock();
+ try {
+   // access the resource protected by this lock
+ } finally {
+   l.unlock();
+ }
+When locking and unlocking occur in different scopes, care must be taken to 
+ensure that all code that is executed while the lock is held is protected by 
+try-finally or try-catch to ensure that the lock is released when necessary.
+Lock implementations provide additional functionality over the use of synchronized 
+methods and statements by providing a non-blocking attempt to acquire a lock
+(tryLock()), an attempt to acquire the lock that can be interrupted 
+(lockInterruptibly(), and an attempt to acquire the lock that can timeout 
+(tryLock(long, TimeUnit)).
+当锁定和解锁发生在不同的范围内时，必须小心，以确保在锁定时执行的所有代码都在try-catch
+-finally受保护的，以确保在必要时释放锁。锁实现通过提供在synchronized方法及语句块
+之上的非阻塞方法tryLock()方法来获得锁，试图获取锁可以被中断，并且可能超时tryLock(long,
+TimeUnit)
+
+A Lock class can also provide behavior and semantics that is quite different 
+from that of the implicit monitor lock, such as guaranteed ordering, non-reentrant 
+usage, or deadlock detection. If an implementation provides such specialized 
+semantics then the implementation must document those semantics.
+Lock类还可以提供与隐式监视器锁完全不同的行为和语义。(如保证排序，不可重入用法或死锁检测)
+如果实现提供了此专用语义，那么实现必须记录这些语义。
+
+Note that Lock instances are just normal objects and can themselves be used as 
+the target in a synchronized statement. Acquiring the monitor lock of a Lock
+instance has no specified relationship with invoking any of the lock() methods 
+of that instance. It is recommended that to avoid confusion you never use Lock 
+instances in this way, except within their own implementation.
+请注意，锁实例只是普通对象，并且可以作为同步语句块中的目标使用。获取锁实例的监视器与调用
+该实例的任何lock()方法没有指定的关系。建议避免混乱，你永远不会这样使用锁实例，除非在它们
+的实现中。
+
+Except where noted, passing a null value for any parameter will result in a 
+NullPointerException being thrown.
+还有，为任何参数传递null将导致空指针异常。
+
+Memory Synchronization
+内存同步
+
+All Lock implementations must enforce the same memory synchronization semantics 
+as provided by the built-in monitor lock, as described in Chapter 17 of The 
+Java™ Language Specification:
+所有的锁实现必须强制执行与内置监视器锁提供的相同内存同步语义
+
+下面就是将要实现的原则：
+A successful lock operation has the same memory synchronization effects as a 
+successful Lock action.
+A successful unlock operation has the same memory synchronization effects as 
+a successful Unlock action.
+Unsuccessful locking and unlocking operations, and reentrant locking/unlocking 
+operations, do not require any memory synchronization effects.
+Implementation Considerations
+
+The three forms of lock acquisition (interruptible, non-interruptible, and timed) 
+may differ in their performance characteristics, ordering guarantees, or other 
+implementation qualities. Further, the ability to interrupt the ongoing acquisition 
+of a lock may not be available in a given Lock class. Consequently, an implementation 
+is not required to define exactly the same guarantees or semantics for all three 
+forms of lock acquisition, nor is it required to support interruption of an 
+ongoing lock acquisition. An implementation is required to clearly document 
+the semantics and guarantees provided by each of the locking methods. It must 
+also obey the interruption semantics as defined in this interface, to the 
+xtent that interruption of lock acquisition is supported: which is either totally
+, or only on method entry.
+三种形式的锁获取(可中断、不可中断和定时)可能不同于其性能特点，顺序保证及其他实现质量。此外，在
+给定的锁类中可能无法使用中断正在进行的锁获取的能力，因此，不需要实现对所有三种形式的锁获取完全
+相同的保证或语义，也不需要支持正在进行的锁获取中断。需要实现以清楚地记录每个锁定方法提供的语义
+和保证。它还必须遵循此接口中定义的中断语义, 优劣支持锁获取中断: 这要么完全, 或仅在方法项上。
+
+As interruption generally implies cancellation, and checks for interruption are 
+often infrequent, an implementation can favor responding to an interrupt over 
+normal method return. This is true even if it can be shown that the interrupt 
+occurred after another action may have unblocked the thread. An implementation 
+should document this behavior.
+由于中断通常意味着取消，并且通常不频繁地检查中断，因此实现可以支持通过寻常方法返回对
+一个中断的相应。当中断发生在另一个操作阻塞线程也成立。
+
+
+lock():
+void lock​()
+Acquires the lock.
+If the lock is not available then the current thread becomes disabled for thread 
+scheduling purposes and lies dormant until the lock has been acquired.
+
+Implementation Considerations
+
+A Lock implementation may be able to detect erroneous use of the lock, such as an 
+invocation that would cause deadlock, and may throw an (unchecked) exception in 
+such circumstances. The circumstances and the exception type must be documented 
+by that Lock implementation.
+一个锁实现可能检测到错误地使用锁，如将导致死锁的调用，并且这种情况下引发(未检查)异常。该锁
+实现必须记录环境和异常类型。
+
+
+unlock():
+void unlock​()
+Releases the lock.
+Implementation Considerations
+
+A Lock implementation will usually impose restrictions on which thread can release 
+a lock (typically only the holder of the lock can release it) and may throw an 
+(unchecked) exception if the restriction is violated. Any restrictions and the 
+exception type must be documented by that Lock implementation.
+锁实现通常会对那些线程可以释放锁施加限制(通常只有锁的只有这可以释放它)，如果违反限制，则可能引发
+(未检查异常)。任何限制和异常类型都必须通过该锁实现记录。
+
+
+(2) 使ReentrantLock实现同步
+测试1
+package chapter04.section01.thread_4_1_1.project_1_ReentrantLockTest;
+
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	
+	private Lock lock = new ReentrantLock();
+	
+	public void testMethod() {
+		lock.lock();
+		for(int i = 0; i < 5; i++) {
+			System.out.println("ThreadName=" + Thread.currentThread().getName()
+					+ (" " + (i + 1)));
+		}
+		lock.unlock();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_1.project_1_ReentrantLockTest;
+
+public class MyThread extends Thread {
+	private MyService service;
+	
+	public MyThread(MyService service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.testMethod();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_1.project_1_ReentrantLockTest;
+
+public class Run {
+	
+	public static void main(String[] args) {
+
+		MyService service = new MyService();
+
+		MyThread a1 = new MyThread(service);
+		MyThread a2 = new MyThread(service);
+		MyThread a3 = new MyThread(service);
+		MyThread a4 = new MyThread(service);
+		MyThread a5 = new MyThread(service);
+
+		a1.start();
+		a2.start();
+		a3.start();
+		a4.start();
+		a5.start();
+	}
+}
+/*
+result:
+ThreadName=Thread-3 1
+ThreadName=Thread-3 2
+ThreadName=Thread-3 3
+ThreadName=Thread-3 4
+ThreadName=Thread-3 5
+ThreadName=Thread-0 1
+ThreadName=Thread-0 2
+ThreadName=Thread-0 3
+ThreadName=Thread-0 4
+ThreadName=Thread-0 5
+ThreadName=Thread-1 1
+ThreadName=Thread-1 2
+ThreadName=Thread-1 3
+ThreadName=Thread-1 4
+ThreadName=Thread-1 5
+ThreadName=Thread-4 1
+ThreadName=Thread-4 2
+ThreadName=Thread-4 3
+ThreadName=Thread-4 4
+ThreadName=Thread-4 5
+ThreadName=Thread-2 1
+ThreadName=Thread-2 2
+ThreadName=Thread-2 3
+ThreadName=Thread-2 4
+ThreadName=Thread-2 5
+*/
+结果分析:
+当前线程打印完毕之后将锁进行释放，其他线程才可以继续打印。线程打印的数据是
+分组打印，因为当前线程已经持有锁，但线程之间打印的顺序是随机的。
+
+
+
+测试2:
+package chapter04.section01.thread_4_1_2.project_1_ConditionTestMoreMethod;
+
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+
+	private Lock lock = new ReentrantLock();
+
+	public void methodA() {
+		try {
+			lock.lock();
+			System.out.println("methodA begin ThreadName="
+					+ Thread.currentThread().getName() + " time="
+					+ System.currentTimeMillis());
+			Thread.sleep(5000);
+			System.out.println("methodA  end ThreadName="
+					+ Thread.currentThread().getName() + " time="
+					+ System.currentTimeMillis());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	public void methodB() {
+		try {
+			lock.lock();
+			System.out.println("methodB begin ThreadName="
+					+ Thread.currentThread().getName() + " time="
+					+ System.currentTimeMillis());
+			Thread.sleep(5000);
+			System.out.println("methodB  end ThreadName="
+					+ Thread.currentThread().getName() + " time="
+					+ System.currentTimeMillis());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+
+}
+
+
+package chapter04.section01.thread_4_1_2.project_1_ConditionTestMoreMethod;
+
+public class ThreadA extends Thread {
+
+	private MyService service;
+
+	public ThreadA(MyService service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.methodA();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_2.project_1_ConditionTestMoreMethod;
+
+public class ThreadAA extends Thread {
+
+	private MyService service;
+
+	public ThreadAA(MyService service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.methodA();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_2.project_1_ConditionTestMoreMethod;
+
+
+public class ThreadB extends Thread {
+
+	private MyService service;
+
+	public ThreadB(MyService service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.methodB();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_2.project_1_ConditionTestMoreMethod;
+
+public class ThreadBB extends Thread {
+
+	private MyService service;
+
+	public ThreadBB(MyService service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.methodB();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_2.project_1_ConditionTestMoreMethod;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		MyService service = new MyService();
+
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		a.start();
+		ThreadAA aa = new ThreadAA(service);
+		aa.setName("AA");
+		aa.start();
+
+		Thread.sleep(100);
+
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		b.start();
+		
+		ThreadBB bb = new ThreadBB(service);
+		bb.setName("BB");
+		bb.start();
+	}
+}
+/*
+result:
+methodA begin ThreadName=A time=1540723593087
+methodA  end ThreadName=A time=1540723598088
+methodA begin ThreadName=AA time=1540723598088
+methodA  end ThreadName=AA time=1540723603088
+methodB begin ThreadName=B time=1540723603088
+methodB  end ThreadName=B time=1540723608088
+methodB begin ThreadName=BB time=1540723608088
+methodB  end ThreadName=BB time=1540723613089
+*/
+结果分析:
+调用lock.lock()代码的线程就持有了"对象监视器"，其他线程只有等待锁被释放时再次争抢。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
