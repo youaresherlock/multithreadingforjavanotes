@@ -1,0 +1,1136 @@
+ 2.使用Condition实现等待/通知
+
+ 概述:
+ 	关键字synchronized与wait()和notify()/notifyAll()方法相结合可以实现等待/通知
+模式，类ReentrantLock也可以实现同样的功能，但需要借助于Condition对象。Condition
+类是JDK5中出现的技术，使用它有更好的灵活性，比如可以实现多路通知功能，也就是在一个
+Lock对象里面可以创建多个Condition(即对象监视器)实例，线程对象可以注册在指定的
+Condition中，从而可以有选择性地进行线程通知，在调度线程上更加灵活。
+
+synchronized等待通知和ReentrantLock等待通知的区别:
+	在使用notify/notifyAll方法进行通知时，被通知的线程由JVM随机选择。但使用ReentrantLock
+结合Condition类是可以实现"选择性通知".
+	synchronized就相当于整个Lock对象中只有一个单一的Condition对象，所有的线程都注
+册到它一个对象的身上。线程开始notifyAll()时，需要通知所有的WAITING线程，没有选择权，
+会出现一定的效率问题。
+
+
+(1) Lock/ReentrantLock的newCondition()方法及Condition类/await、signal方法
+注:
+	condition对象是通过实现了Lock接口的具体锁对象来调用newCondition方法实现的。因此我们
+有必要查看Lock接口的newCondition方法以及ReentrantLock下的newCondtion方法，此外还有一些
+读写锁也实现了Lock的newCondition方法。
+
+文档翻译
+1) Lock和ReentrantLock的newConditon()
+
+Lock newCondition():
+Condition newCondition​()
+Returns a new Condition instance that is bound to this Lock instance.
+Before waiting on the condition the lock must be held by the current thread. A call to 
+Condition.await() will atomically release the lock before waiting and re-acquire 
+the lock before the wait returns.
+返回绑定到此锁实例的新条件实例。在等待条件之前，锁必须由当前线程持有。调用wait()在等待和重新
+获得锁之前自动释放锁。
+
+Implementation Considerations
+
+The exact operation of the Condition instance depends on the Lock implementation 
+and must be documented by that implementation.
+实现注意事项
+
+Condition实例的确切操作取决于锁实现。并且必须由该实现记录。
+
+Returns:
+A new Condition instance for this Lock instance 返回Lock实例的新的Condition实例
+Throws:
+UnsupportedOperationException - if this Lock implementation does not support conditions
+如果这个Lock接口的实现不支持conditons,那么抛出不支持操纵异常
+
+
+ReentrantLock newCondition():
+public Condition newCondition​()
+Returns a Condition instance for use with this Lock instance.
+The returned Condition instance supports the same usages as do the Object monitor methods 
+(wait, notify, and notifyAll) when used with the built-in monitor lock.
+返回用于Lock实例的一个Condition实例
+返回的条件实例支持与当使用内置监视器对象的对象监视器方法相同的用法(wait,notify,notifyAll)
+
+If this lock is not held when any of the Condition waiting or signalling methods are 
+called, then an IllegalMonitorStateException is thrown.
+When the condition waiting methods are called the lock is released and, before they 
+return, the lock is reacquired and the lock hold count restored to what it was when 
+the method was called.
+如果当任何Conditition对象等待或通知方法调用的时候不持有锁，那么就抛出IllegalMonitorStateException
+异常。当condition对象的wait()方法被调用的时候锁会被释放，在该方法返回之前，锁被重新获取，锁计数器恢复到
+原来的状态。
+If a thread is interrupted while waiting then the wait will terminate, an 
+InterruptedException will be thrown, and the thread's interrupted status will be cleared.
+Waiting threads are signalled in FIFO order.
+The ordering of lock reacquisition for threads returning from waiting methods 
+is the same as for threads initially acquiring the lock, which is in the default
+case not specified, but for fair locks favors those threads that have been 
+waiting the longest.
+如果当调用wait()方法等待锁的时候被线程被中断，则抛出InterruptedException异常，同时线程
+的中断状态将被清除。
+等待线程以先进先出的顺序被通知。
+从wait()方法返回的线程重新获得锁的顺序与线程开始的时候获得锁的顺序一样，如果不指定默认是
+这样子。但是对于公平锁而言，更倾向于那些已经等待最长时间的线程获得锁。
+
+2) Condition类/await、signal方法
+
+Condition类:
+public interface Condition
+Condition factors out the Object monitor methods (wait, notify and notifyAll) into distinct 
+objects to give the effect of having multiple wait-sets per object, by combining them with 
+the use of arbitrary Lock implementations. Where a Lock replaces the use of synchronized 
+methods and statements, a Condition replaces the use of the Object monitor methods.
+Conditions (also known as condition queues or condition variables) provide a means for 
+one thread to suspend execution (to "wait") until notified by another thread that some 
+state condition may now be true. Because access to this shared state information occurs 
+in different threads, it must be protected, so a lock of some form is associated with 
+the condition. The key property that waiting for a condition provides is that it atomically 
+releases the associated lock and suspends the current thread, just like Object.wait.
+条件因素将对象监视器方法(wait, notify和notifyAll)排除到不同的对象中，通过将它们与任意锁实现相结合，
+使每个对象具有多个等待集的效果。Lock对象替代了synchronized方法及同步语句块的使用，一个Condition
+对象替代了对象监视器方法的使用。Conditions(也称为条件队列或条件变量)为一个线程提供了暂停执行("等待")
+的方法，直到某个状态条件为真时另一个线程通知。由于对这个共享状态信息的访问发生在不同的线程中，因此必须
+对其进行保护，因此必须与某种形式的锁相关联的条件。一个condition对象提供的wait方法的关键属性是自动释放关联
+的锁并挂起当前的线程(即await()方法的作用),类似Object.wait()的作用
+
+A Condition instance is intrinsically bound to a lock. To obtain a Condition instance for 
+a particular Lock instance use its newCondition() method.
+一个Condition实例本质上绑定一个lock实例.要获取一特定Lock实例的一个Condition实例可以使用它的new
+Conditon()方法
+
+As an example, suppose we have a bounded buffer which supports put and take methods. If 
+a take is attempted on an empty buffer, then the thread will block until an item becomes 
+available; if a put is attempted on a full buffer, then the thread will block until a 
+space becomes available. We would like to keep waiting put threads and take threads in 
+separate wait-sets so that we can use the optimization of only notifying a single thread 
+at a time when items or spaces become available in the buffer. This can be achieved 
+using two Condition instances.
+例如，假设我们有一个支持put和take方法的有界缓冲区。如果在空缓冲区上尝试执行take方法，则线程将
+阻塞，直到某项可用为止;如果想要在一个满了的缓冲区调用put方法，那么线程将阻塞，直到空间可用为止。
+这个可以通过使用两个Condition实例来实现。
+
+ class BoundedBuffer {
+   final Lock lock = new ReentrantLock();
+   final Condition notFull  = lock.newCondition(); 
+   final Condition notEmpty = lock.newCondition(); 
+
+   final Object[] items = new Object[100];
+   /**
+   * putptr： 是数组中将要放入的索引
+   * takeptr: 是数组中将要取走的索引
+   * count是记录数组中有多少个有效元素
+   * 这里我的理解是应该给他们都加上volatile,这样线程之间可见。
+   * 之前我的理解有误，因为synchronized和这些lock.lock实际上保证了count的可见性，即
+   * 进程公共堆栈中取值，而不是从线程私有堆栈中取值
+   */
+   int putptr, takeptr, count;
+
+   public void put(Object x) throws InterruptedException {
+     lock.lock();
+     try {
+       while (count == items.length)
+         notFull.await();
+       items[putptr] = x;
+       if (++putptr == items.length) putptr = 0;
+       ++count;
+       notEmpty.signal();
+     } finally {
+       lock.unlock();
+     }
+   }
+
+   public Object take() throws InterruptedException {
+     lock.lock();
+     try {
+       while (count == 0)
+         notEmpty.await();
+       Object x = items[takeptr];
+       if (++takeptr == items.length) takeptr = 0; 
+       --count;
+       notFull.signal();
+       return x;
+     } finally {
+       lock.unlock();
+     }
+   }
+ }
+ 
+(The ArrayBlockingQueue class provides this functionality, so there is no reason 
+to implement this sample usage class.)
+A Condition implementation can provide behavior and semantics that is different 
+from that of the Object monitor methods, such as guaranteed ordering for notifications, 
+or not requiring a lock to be held when performing notifications. If an implementation
+provides such specialized semantics then the implementation must document those semantics.
+(ArrayBlockingQueue类提供了这个功能，所以没有理由实现这个示例用法类)
+一个Conditon实现可以提供与对象监视器方法不同的行为和语义，比如保证通知的顺序，或者在执行通知时不需
+要持有锁。如果实现提供了这样的专用语义，那么实现必须记录这些语义。
+
+Note that Condition instances are just normal objects and can themselves be used as 
+the target in a synchronized statement, and can have their own monitor wait and notify 
+methods invoked. Acquiring the monitor lock of a Condition instance, or using its 
+monitor methods, has no specified relationship with acquiring the Lock associated 
+with that Condition or the use of its waiting and signalling methods. It is recommended 
+that to avoid confusion you never use Condition instances in this way, except perhaps 
+within their own implementation.
+注意，Condition实例只是普通对象，它们本身可以在同步语句中用作目标，并且可以调用它们自己的监视器
+等待和通知方法。获取一个Condition实例的监视器锁或使用它们的监视器方法，与获取与该条件相关的锁或使
+用其等待和通知方法没有特定的关系。建议为了避免混淆，永远不要以这种方式使用条件实例，除非是在它们
+自己的实现中。
+
+Except where noted, passing a null value for any parameter will result in a 
+NullPointerException being thrown.
+为任何参数传递空值将导致抛出NullPointerException异常
+
+Implementation Considerations
+
+When waiting upon a Condition, a "spurious wakeup" is permitted to occur, in 
+general, as a concession to the underlying platform semantics. This has little 
+practical impact on most application programs as a Condition should always be 
+waited upon in a loop, testing the state predicate that is being waited for. 
+An implementation is free to remove the possibility of spurious wakeups but it 
+is recommended that applications programmers always assume that they can occur 
+and so always wait in a loop.
+当一个Condition调用wait方法之后，通常允许发生"虚假唤醒"，作为对底层平台语义的让步，这对
+大多数应用程序没有什么实际上的影响，因为wait调用应总是发生在一个循环中，检测正在等待的状态
+。可以自由的实现来排除虚假唤醒的可能性，但建议应用程序程序员始终假定它们可能发生，所以总是
+在循环中等待。
+
+The three forms of condition waiting (interruptible, non-interruptible, and timed) 
+may differ in their ease of implementation on some platforms and in their performance 
+characteristics. In particular, it may be difficult to provide these features and 
+maintain specific semantics such as ordering guarantees. Further, the ability to 
+interrupt the actual suspension of the thread may not always be feasible to 
+implement on all platforms.
+条件的等待的三种形式(可中断的，不可中断的和定时的)在某些平台上实现的便捷性和性能特性上可能有所
+不同。特别是，提供这些特性和维护特定的语义(比如顺序保证)可能会很困难。此外，在所有平台上实现
+中断正在挂起的线程的能力并不总是可行的。
+
+Consequently, an implementation is not required to define exactly the same guarantees 
+or semantics for all three forms of waiting, nor is it required to support 
+interruption of the actual suspension of the thread.
+因此，实现不需要为所有三种等待形式定义完全相同的保证或语义，也不需要支持中断线程的实际挂起。
+
+An implementation is required to clearly document the semantics and guarantees 
+provided by each of the waiting methods, and when an implementation does support 
+interruption of thread suspension then it must obey the interruption semantics as
+defined in this interface.
+需要实现清除地记录每个等待方法提供的语义和保证
+
+As interruption generally implies cancellation, and checks for interruption are often 
+infrequent, an implementation can favor responding to an interrupt over normal method 
+return. This is true even if it can be shown that the interrupt occurred after another 
+action that may have unblocked the thread. An implementation should document this behavior.
+由于中断通常意味着取消，而且检查中断的频率很低，因此实现可能更倾向于响应中断而不是正常的方法返回。
+即使它可以显示中断发生在另一个动作之后，可能已经解除了线程的阻塞，实现应该记录这种行为。
+
+
+这里只翻译await()和signal()方法，其他的方法大同小异
+await():
+void await​()
+    throws InterruptedException
+Causes the current thread to wait until it is signalled or interrupted.
+The lock associated with this Condition is atomically released and the current thread 
+becomes disabled for thread scheduling purposes and lies dormant until one of four things happens:
+导致当前线程等待，直到它被通知或中断。
+与此Condition对象关联的lock被原子地释放，当前线程处于线程调度目的而被禁用，并处于休眠状态，直到发生
+以下四种情况之一:
+
+Some other thread invokes the signal() method for this Condition and the current thread 
+happens to be chosen as the thread to be awakened; or
+Some other thread invokes the signalAll() method for this Condition; or
+Some other thread interrupts the current thread, and interruption of thread suspension 
+is supported; or
+A "spurious wakeup" occurs.
+In all cases, before this method can return the current thread must re-acquire the lock 
+associated with this condition. When the thread returns it is guaranteed to hold this lock.
+其他一些线程调用了这个Condition对象的signal()方法，而当前线程恰好被选择为要唤醒的线程;或其他一些
+线程调用这个Condition对象的signalAll()方法;或其他的线程中断了当前线程，并且中断挂起的线程是支持的;
+或者一个"虚假唤醒"发生了。在所有的情况下，在此方法返回之前，当前线程必须重新获取与Condition相关联
+的lock锁。当线程返回时，它保证持有这个锁。
+
+If the current thread:
+has its interrupted status set on entry to this method; or
+is interrupted while waiting and interruption of thread suspension is supported,
+then InterruptedException is thrown and the current thread's interrupted status is cleared. 
+It is not specified, in the first case, whether or not the test for interruption occurs 
+before the lock is released.
+如果当前线程在进入此方法时设置了中断状态;或支持在wait()方法调用期间中断以及在线程挂起时中断，那么
+抛出InterrupedException,同时当前线程的中断状态被清除。在第一情况下，不论在释放锁之前是否进行中断
+测试。
+
+Implementation Considerations
+The current thread is assumed to hold the lock associated with this Condition when this 
+method is called. It is up to the implementation to determine if this is the case and if 
+not, how to respond. Typically, an exception will be thrown (such as IllegalMonitorStateException) 
+and the implementation must document that fact.
+当await()方法被调用,假定当前线程持有与此Condition实例相关联的锁。这取决于实现，以确定这是否是事实，如果不是，
+如何响应。通常会抛出(IllegalMonitorStateException),实现必须记录这个事实。
+
+An implementation can favor responding to an interrupt over normal method return in 
+response to a signal. In that case the implementation must ensure that the signal is 
+redirected to another waiting thread, if there is one.
+实现可以支持对中断的响应而不是通过正常方法返回。在这种情况下，实现必须确保signal会通知的线程被
+重定向到另一个等待线程(如果有的话)
+
+Throws:
+InterruptedException - if the current thread is interrupted (and interruption of 
+thread suspension is supported)
+
+
+signal():
+void signal​()
+Wakes up one waiting thread.
+If any threads are waiting on this condition then one is selected for waking up. That 
+thread must then re-acquire the lock before returning from await.
+唤醒一个正在等待的线程
+如果有线程正在condition下等待，那么将选择一个线程进行唤醒。线程在等待返回之前必须重新获取锁。
+
+Implementation Considerations
+
+An implementation may (and typically does) require that the current thread hold the 
+lock associated with this Condition when this method is called. Implementations must 
+document this precondition and any actions taken if the lock is not held. Typically, 
+an exception such as IllegalMonitorStateException will be thrown.
+当调用此方法时，实现可能需要当前线程持有与此条件相关联的锁(通常是这样).实现笔录记录这个先决条件
+以及如果锁不持有锁采取的操作。通常，会抛出一个异常，例如IllegalMonitorStateException异常。
+
+
+
+(2) 错误用法与解决
+举例1:
+package chapter04.section01.thread_4_1_3.project_1_UseConditionWaitNotifyError;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	private Lock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	
+	public void await() {
+		try {
+			condition.await();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_3.project_1_UseConditionWaitNotifyError;
+
+public class ThreadA extends Thread{
+	private MyService service;
+	
+	public ThreadA(MyService service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.await();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_3.project_1_UseConditionWaitNotifyError;
+
+public class Run {
+	public static void main(String[] args) {
+		MyService service = new MyService();
+		
+		ThreadA a = new ThreadA(service);
+		a.start();
+	}
+}
+/*
+result:
+Exception in thread "Thread-0" java.lang.IllegalMonitorStateException
+	at java.base/java.util.concurrent.locks.ReentrantLock$Sync.tryRelease(Unknown Source)
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer.release(Unknown Source)
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer.fullyRelease(Unknown Source)
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.await(Unknown Source)
+	at chapter04.section01.thread_4_1_3.project_1_UseConditionWaitNotifyError.MyService.await(MyService.java:13)
+	at chapter04.section01.thread_4_1_3.project_1_UseConditionWaitNotifyError.ThreadA.run(ThreadA.java:13)
+*/
+结果分析:
+可以看到监视器出错，要在condition.wait()方法调用之前用lock.lock()代码获得同步监
+视器
+
+
+举例2:
+package chapter04.section01.thread_4_1_3.project_2_z3ok;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	private Lock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	
+	public void await() {
+		try {
+			lock.lock(); 
+			System.out.println("A");
+			condition.await();
+			System.out.println("B");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+			System.out.println("锁释放了!");
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_3.project_2_z3ok;
+
+public class ThreadA extends Thread{
+	private MyService service;
+	
+	public ThreadA(MyService service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.await();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_3.project_2_z3ok;
+
+public class Run {
+	public static void main(String[] args) {
+		MyService service = new MyService();
+		
+		ThreadA a = new ThreadA(service);
+		a.start();
+	}
+}
+/*
+A
+*/
+结果分析: 调用了Condition对象的await()方法，使当前执行任务的线程进入了WAITING状
+态，但是没有唤醒
+
+
+(3) 正确使用Condition实现等待/通知
+
+package chapter04.section01.thread_4_1_4.project_1_UseConditionWaitNotifyOk;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	private Lock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	
+	public void await() {
+		try {
+			lock.lock(); 
+			System.out.println(" await时间为" + System.currentTimeMillis());
+			condition.await();
+			System.out.println("B");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+			System.out.println("锁释放了!");
+		}
+	}
+	
+	public void signal() {
+		try {
+			lock.lock();
+			System.out.println("signal时间为" + System.currentTimeMillis());
+			condition.signal();
+		} catch (Exception e) {
+			// TODO: handle exception
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_4.project_1_UseConditionWaitNotifyOk;
+
+public class ThreadA extends Thread{
+	private MyService service;
+	
+	public ThreadA(MyService service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.await();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_4.project_1_UseConditionWaitNotifyOk;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException{
+		MyService service = new MyService();
+		
+		ThreadA a = new ThreadA(service);
+		a.start();
+		
+		Thread.sleep(3000);
+		
+		service.signal();
+	}
+}
+/*
+result:
+ await时间为1540884494515
+signal时间为1540884497516
+B
+锁释放了!
+*/
+
+
+(4) 使用多个Condition实现通知部分线程
+错误用法举例:
+package chapter04.section01.thread_4_1_5.project_1_MustUseMoreCondition_Error;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	private Lock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	
+	public void awaitA() {
+		try {
+			lock.lock();
+			System.out.println("begin awaitA时间为" + System.currentTimeMillis()
+			+ " ThreadName=" + Thread.currentThread().getName());
+			condition.await();
+			System.out.println("  end awaitA时间为" + System.currentTimeMillis() 
+			+ " ThreadName=" + Thread.currentThread().getName());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+	public void awaitB() {
+		try {
+			lock.lock();
+			System.out.println("begin awaitB时间为" + System.currentTimeMillis()
+					+ " ThreadName=" + Thread.currentThread().getName());
+			condition.await();
+			System.out.println("  end awaitB时间为" + System.currentTimeMillis()
+					+ " ThreadName=" + Thread.currentThread().getName());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+	public void signalAll() {
+		try {
+			lock.lock();
+			System.out.println("  signalAll时间为" + System.currentTimeMillis()
+					+ " ThreadName=" + Thread.currentThread().getName());
+			condition.signalAll();
+		} catch (Exception e) {
+			// TODO: handle exception
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_5.project_1_MustUseMoreCondition_Error;
+
+public class ThreadA extends Thread{
+	private MyService service;
+	
+	public ThreadA(MyService service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.awaitA();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_5.project_1_MustUseMoreCondition_Error;
+
+public class ThreadB extends Thread {
+
+	private MyService service;
+
+	public ThreadB(MyService service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.awaitB();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_5.project_1_MustUseMoreCondition_Error;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+
+		MyService service = new MyService();
+
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		a.start();
+
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		b.start();
+
+		Thread.sleep(3000);
+
+		service.signalAll();
+
+	}
+}
+/*
+result:
+begin awaitA时间为1540885187756 ThreadName=A
+begin awaitB时间为1540885187756 ThreadName=B
+  signalAll时间为1540885190756 ThreadName=main
+  end awaitA时间为1540885190756 ThreadName=A
+  end awaitB时间为1540885190756 ThreadName=B
+*/
+
+
+如果先要对线程分组进行唤醒，那么就可以使用多个Condition对象，每一个对象都与一组
+线程绑定。
+正确用法举例:
+package chapter04.section01.thread_4_1_6.project_1_MustUseMoreCondition_Ok;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	private Lock lock = new ReentrantLock();
+	public Condition conditionA = lock.newCondition();
+	public Condition conditionB = lock.newCondition();
+	
+	public void awaitA() {
+		try {
+			lock.lock();
+			System.out.println("begin awaitA时间为" + System.currentTimeMillis()
+			+ " ThreadName=" + Thread.currentThread().getName());
+			conditionA.await();
+			System.out.println("  end awaitA时间为" + System.currentTimeMillis() 
+			+ " ThreadName=" + Thread.currentThread().getName());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+	public void awaitB() {
+		try {
+			lock.lock();
+			System.out.println("begin awaitB时间为" + System.currentTimeMillis()
+					+ " ThreadName=" + Thread.currentThread().getName());
+			conditionB.await();
+			System.out.println("  end awaitB时间为" + System.currentTimeMillis()
+					+ " ThreadName=" + Thread.currentThread().getName());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+	public void signalAll_A() {
+		try {
+			lock.lock();
+			System.out.println("  signalAll_A时间为" + System.currentTimeMillis()
+					+ " ThreadName=" + Thread.currentThread().getName());
+			conditionA.signalAll();
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	public void signalAll_B() {
+		try {
+			lock.lock();
+			System.out.println("  signalAll_B时间为" + System.currentTimeMillis()
+					+ " ThreadName=" + Thread.currentThread().getName());
+			conditionB.signalAll();
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_6.project_1_MustUseMoreCondition_Ok;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+
+		MyService service = new MyService();
+
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		a.start();
+
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		b.start();
+
+		Thread.sleep(3000);
+
+		service.signalAll_A();
+	}
+}
+/*
+result:
+begin awaitA时间为1540885681597 ThreadName=A
+begin awaitB时间为1540885681598 ThreadName=B
+  signalAll_A时间为1540885684599 ThreadName=main
+  end awaitA时间为1540885684600 ThreadName=A
+*/
+线程ThreadA和ThreadB与前面例子一样
+可以看到使用ReentrantLock对象可以唤醒指定种类的线程，这是控制部分线程行为的方便
+方式
+
+
+(5) 实现生产者和消费者模式
+举例1 一对一
+package chapter04.section01.thread_4_1_7.project_1_ConditionTest;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	private Lock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	private boolean hasValue = false;
+	
+	public void set() {
+		try {
+			lock.lock();
+			while(hasValue == true) {
+				condition.await();
+			}
+			System.out.println("打印★");
+			hasValue = true;
+			condition.signal();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+	public void get() {
+		try {
+			lock.lock();
+			while(hasValue == false) {
+				condition.await();
+			}
+			System.out.println("打印☆");
+			hasValue = false;
+			condition.signal();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+}
+
+
+package chapter04.section01.thread_4_1_7.project_1_ConditionTest;
+
+public class ThreadA extends Thread{
+	private MyService service;
+	
+	public ThreadA(MyService service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		while(true) {
+			service.set();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_7.project_1_ConditionTest;
+
+public class ThreadB extends Thread {
+
+	private MyService service;
+
+	public ThreadB(MyService service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		while(true) {
+			service.get();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_7.project_1_ConditionTest;
+
+import chapter02.section01.thread_2_1_8.project_1_synNotExtends.MyThreadA;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		MyService myService = new MyService();
+		
+		ThreadA a = new ThreadA(myService);
+		a.start();
+		
+		ThreadB b = new ThreadB(myService);
+		b.start();
+	}
+}
+/*
+打印☆
+打印★
+打印☆
+打印★
+打印☆
+打印★
+打印☆
+打印★
+打印☆
+打印★
+*/
+
+
+
+多对多交替打印:
+package chapter04.section01.thread_4_1_8.project_1_ConditionTestManyToMany;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.Lock;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class MyService {
+	private Lock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	private boolean hasValue = false;
+	
+	public void set() {
+		try {
+			lock.lock();
+			while(hasValue == true) {
+				System.out.println("有可能★★连续");
+				condition.await();
+			}
+			System.out.println("打印★");
+			hasValue = true;
+			//condition.signal();
+			condition.signalAll();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+	public void get() {
+		try {
+			lock.lock();
+			while(hasValue == false) {
+				System.out.println("有可能☆连续");
+				condition.await();
+			}
+			System.out.println("打印☆");
+			hasValue = false;
+			//condition.signal();
+			condition.signalAll();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+}
+
+
+package chapter04.section01.thread_4_1_8.project_1_ConditionTestManyToMany;
+
+public class ThreadA extends Thread{
+	private MyService service;
+	
+	public ThreadA(MyService service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		while(true) {
+			service.set();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_8.project_1_ConditionTestManyToMany;
+
+public class ThreadB extends Thread {
+
+	private MyService service;
+
+	public ThreadB(MyService service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		while(true) {
+			service.get();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_8.project_1_ConditionTestManyToMany;
+
+import chapter02.section01.thread_2_1_8.project_1_synNotExtends.MyThreadA;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		MyService myService = new MyService();
+		
+		ThreadA[] threadA = new ThreadA[10];
+		ThreadB[] threadB = new ThreadB[10];
+		
+		for(int i = 0; i < 10; i++) {
+			threadA[i] = new ThreadA(myService);
+			threadB[i] = new ThreadB(myService);
+			threadA[i].start();
+			threadB[i].start();
+		}
+	}
+}
+/*
+有可能★★连续
+有可能★★连续
+有可能★★连续
+有可能★★连续
+打印☆
+有可能☆连续
+有可能☆连续
+有可能☆连续
+有可能☆连续
+有可能☆连续
+打印★
+有可能★★连续
+有可能★★连续
+有可能★★连续
+打印☆
+有可能☆连续
+有可能☆连续
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
