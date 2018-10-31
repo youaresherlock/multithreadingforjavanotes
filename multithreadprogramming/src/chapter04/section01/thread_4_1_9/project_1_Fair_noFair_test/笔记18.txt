@@ -1,0 +1,1404 @@
+3.公平锁和非公平锁以及常用方法的使用
+
+(1) 公平锁和非公平锁
+公平锁和非公平锁:
+	锁Lock分为"公平锁"和"非公平锁"，公平锁表示线程获取锁的顺序是按照线程加锁的顺序来
+分配的，即先来先得的FIFO先进先出顺序。而非公平锁就是一种获得锁的抢占机制，是随机获得锁的
+，和公平锁不一样的就是先来的不一定先得到锁，这个方式可能造成某些线程一直拿不到锁，结果也
+就是不公平了。
+默认情况下ReentrantLock的构造函数不传递参数是非公平锁false,如果传递参数则指定是否公平。
+对于这两种锁的支持，ReentrantLock实际上是内建了两个锁来分分别实现这两种锁，一个叫FairSync
+(公平锁)，一个叫NonFairSync(非公平锁).由于这是多线程知识，我后面会开一个高并发专栏，讲讲
+源代码及一些框架的用法。
+
+
+举例:
+package chapter04.section01.thread_4_1_9.project_1_Fair_noFair_test;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+	
+	private ReentrantLock lock;
+	
+	public Service(boolean isFair) {
+		super();
+		lock = new ReentrantLock(isFair);
+	}
+	
+	public void serviceMethod() {
+		try {
+			lock.lock();
+			System.out.println("ThreadName=" + Thread.currentThread().getName()
+					+ "获得锁定");
+		} finally {
+			// TODO: handle finally clause
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_9.project_1_Fair_noFair_test;
+
+public class RunFair {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service(true);
+
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				System.out.println("★线程" + Thread.currentThread().getName()
+						+ "运行了");
+				service.serviceMethod();
+			}
+		};
+
+		Thread[] threadArray = new Thread[10];
+		for (int i = 0; i < 10; i++) {
+			threadArray[i] = new Thread(runnable);
+		}
+		for (int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+	}
+}
+/*
+result:
+★线程Thread-1运行了
+★线程Thread-8运行了
+★线程Thread-6运行了
+★线程Thread-7运行了
+★线程Thread-3运行了
+★线程Thread-5运行了
+★线程Thread-0运行了
+★线程Thread-4运行了
+★线程Thread-2运行了
+★线程Thread-9运行了
+ThreadName=Thread-0获得锁定
+ThreadName=Thread-4获得锁定
+ThreadName=Thread-6获得锁定
+ThreadName=Thread-8获得锁定
+ThreadName=Thread-2获得锁定
+ThreadName=Thread-1获得锁定
+ThreadName=Thread-5获得锁定
+ThreadName=Thread-3获得锁定
+ThreadName=Thread-7获得锁定
+ThreadName=Thread-9获得锁定
+*/
+可以看到大体上是这个顺序，有兴趣可以去读读源码
+
+
+package chapter04.section01.thread_4_1_9.project_1_Fair_noFair_test;
+
+public class RunNotFair {
+	public static void main(String[] args) {
+		final Service service = new Service(false);
+		
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				System.out.println("★线程" + Thread.currentThread().getName()
+						+ "运行了");
+				service.serviceMethod();
+			}
+		};
+		
+		Thread[] threadArray = new Thread[10];
+		for(int i = 0; i < 10; i++) {
+			threadArray[i] = new Thread(runnable);
+		}
+		
+		for(int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+	}
+}
+/*
+result:
+★线程Thread-1运行了
+★线程Thread-6运行了
+★线程Thread-4运行了
+★线程Thread-2运行了
+★线程Thread-0运行了
+★线程Thread-5运行了
+★线程Thread-3运行了
+★线程Thread-7运行了
+★线程Thread-9运行了
+ThreadName=Thread-9获得锁定
+ThreadName=Thread-7获得锁定
+ThreadName=Thread-3获得锁定
+ThreadName=Thread-1获得锁定
+ThreadName=Thread-0获得锁定
+ThreadName=Thread-2获得锁定
+ThreadName=Thread-5获得锁定
+ThreadName=Thread-6获得锁定
+ThreadName=Thread-4获得锁定
+★线程Thread-8运行了
+ThreadName=Thread-8获得锁定
+*/
+可以看到非公平锁THread-1先执行了竟然是第一个获得锁。
+
+
+4. ReentrantLock实例的方法的使用
+
+(1) 方法getHoldCount(), getQueueLength()和getWaitQueueLength()的测试
+
+1) getHoldCount()
+int getHoldCount()的作用是查询当前线程保持此锁定的个数，也就是调用lock()方法的次数
+文档:
+public int getHoldCount​()
+Queries the number of holds on this lock by the current thread.
+A thread has a hold on a lock for each lock action that is not matched by an unlock 
+action.
+查询当前线程对该锁的持有数量
+对于每个锁操作，线程都持有一个锁，而锁操作与解锁操作不匹配
+
+The hold count information is typically only used for testing and debugging purposes. 
+For example, if a certain section of code should not be entered with the lock already 
+held then we can assert that fact:
+拥有锁的信息通常只用于测试和调试目的
+例如，如果不应该进入已经持有锁的代码段，我们可以断言:
+(在实现中,assertion就是在程序中的一条语句，它对一个boolean表达式进行检查，一个正确程序必须保证这个
+boolean表达式的值为true;如果该值为false,说明程序已经处于不正确的状态下，系统将给出警告并退出。)
+ class X {
+   ReentrantLock lock = new ReentrantLock();
+   // ...
+   public void m() {
+     assert lock.getHoldCount() == 0;
+     lock.lock();
+     try {
+       // ... method body
+     } finally {
+       lock.unlock();
+     }
+   }
+ }
+Returns:
+the number of holds on this lock by the current thread, or zero if this lock is not held
+by the current thread
+返回:
+当前线程持有此锁的次数，如果当前线程未持有此锁，则为0
+
+
+举个例子:
+package chapter04.section01.thread_4_1_10.project_1_lockMethodTest1.test1;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+	
+	private ReentrantLock lock = new ReentrantLock();
+	
+	public void serviceMethod1() {
+		try {
+			lock.lock();
+			System.out.println("serviceMethod1 getHoldCount="
+					+ lock.getHoldCount());
+			serviceMethod2();
+		} finally {
+			// TODO: handle finally clause
+		}
+	}
+	
+	public void serviceMethod2() {
+		try {
+			lock.lock();
+			System.out.println("serviceMethod2 getHoldCount="
+					+ lock.getHoldCount());
+		} finally {
+			// TODO: handle finally clause
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_10.project_1_lockMethodTest1.test1;
+
+public class Run {
+	public static void main(String[] args) {
+		Service service = new Service();
+		service.serviceMethod1();
+	}
+}
+/*
+result:
+serviceMethod1 getHoldCount=1
+serviceMethod2 getHoldCount=2
+*/
+
+
+2) getQueueLength()
+方法int getQueueLength()的作用是返回正在等待获取此锁定的线程估计数
+
+public final int getQueueLength​()
+Returns an estimate of the number of threads waiting to acquire. The value is only an 
+estimate because the number of threads may change dynamically while this method traverses 
+internal data structures. This method is designed for use in monitoring system state, 
+not for synchronization control.
+Returns:
+the estimated number of threads waiting for this lock
+返回正在等待获取锁的线程数量的估计值。这个值只是一个估计值，因为这个方法遍历内部数据结构时，线程的
+数量可能会动态变化。本方法是设计用于监测系统状态,不是用于同步控制
+返回:
+等待这个锁的线程的估计数量
+
+举例:
+package chapter04.section01.thread_4_1_10.project_1_lockMethodTest1.test2;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	public ReentrantLock lock = new ReentrantLock();
+
+	public void serviceMethod() {
+		try {
+			lock.lock();
+			System.out.println("ThreadName=" + Thread.currentThread().getName()
+					+ "进入方法！");
+			Thread.sleep(Integer.MAX_VALUE);
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_10.project_1_lockMethodTest1.test2;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service();
+		
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				service.serviceMethod();
+			}
+		};
+		
+		Thread[] threadArray = new Thread[10];
+		for(int i = 0; i < 10; i++) {
+			threadArray[i] = new Thread(runnable);
+		}
+		for(int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+		Thread.sleep(2000);
+		System.out.println("有线程数: " + service.lock.getQueueLength() + "在等待获取锁!");
+	}
+}
+/*
+result:
+ThreadName=Thread-3进入方法！
+有线程数: 9在等待获取锁!
+*/
+
+
+3) getWaitQueueLength(Condition condition)
+方法int getWaitQueueLength(Condition condition)的作用是返回等待与此锁定相关的
+给定条件Condition的线程估计数，比如有5个线程，每个线程都执行了同一个condition对象
+await()方法，则调用getWaitQueueLength(Condition condition)方法时返回的int值是5
+
+public int getWaitQueueLength​(Condition condition)
+Returns an estimate of the number of threads waiting on the given condition 
+associated with this lock. Note that because timeouts and interrupts may occur 
+at any time, the estimate serves only as an upper bound on the actual number of 
+waiters. This method is designed for use in monitoring of the system state, not 
+for synchronization control.
+Parameters:
+condition - the condition
+Returns:
+the estimated number of waiting threads
+Throws:
+IllegalMonitorStateException - if this lock is not held 如果不持有此锁
+IllegalArgumentException - if the given condition is not associated with this lock
+							如果给定条件与此锁无关
+NullPointerException - if the condition is null
+						如果条件为null
+返回等待于此锁关联的给定条件的线程数的估计值。由于超时和中断可能在任何时候发生，因此此估计
+仅作为实际等待者数量的上限。该方法用于系统状态的监控，而不是同步控制
+参数:
+condition - 条件
+返回:
+等待线程的估计数量
+
+举个例子:
+package chapter04.section01.thread_4_1_10.project_1_lockMethodTest1.test3;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	private ReentrantLock lock = new ReentrantLock();
+	private Condition newCondition = lock.newCondition();
+
+	public void waitMethod() {
+		try {
+			lock.lock();
+			newCondition.await();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	public void notityMethod() {
+		try {
+			lock.lock();
+			System.out.println("有" + lock.getWaitQueueLength(newCondition)
+					+ "个线程正在等待newCondition");
+			newCondition.signal();
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_10.project_1_lockMethodTest1.test3;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service();
+
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				service.waitMethod();
+			}
+		};
+
+		Thread[] threadArray = new Thread[10];
+		for (int i = 0; i < 10; i++) {
+			threadArray[i] = new Thread(runnable);
+		}
+		for (int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+		Thread.sleep(2000);
+		service.notityMethod();
+	}
+}
+/*
+result:
+有10个线程正在等待newCondition
+*/
+
+
+(2) 方法hasQueueThread()、hasQueueThreads()和hasWaiters()的测试
+
+1) hasQueueThread()和hasQueueThreads()
+方法boolean hasQueueThread(Thread thread)的作用是查询指定的线程是否正在等待获取
+此锁定
+方法boolean hasQueueThreads()的作用是查询是否有线程正在等待获取此锁定
+
+举个例子:
+package chapter04.section01.thread_4_1_11.project_1_lockMethodTest2.test1;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	public ReentrantLock lock = new ReentrantLock();
+	public Condition newCondition = lock.newCondition();
+	
+	public void waitMethod() {
+		try {
+			lock.lock();
+			Thread.sleep(Integer.MAX_VALUE);
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}	
+}
+
+
+package chapter04.section01.thread_4_1_11.project_1_lockMethodTest2.test1;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service();
+
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				service.waitMethod();
+			}
+		};
+
+		Thread threadA = new Thread(runnable);
+		threadA.start();
+
+		Thread.sleep(500);
+
+		Thread threadB = new Thread(runnable);
+		threadB.start();
+
+		Thread.sleep(500);
+		System.out.println(service.lock.hasQueuedThread(threadA));
+		System.out.println(service.lock.hasQueuedThread(threadB));
+		System.out.println(service.lock.hasQueuedThreads());
+	}
+}
+/*
+result:
+false
+true
+true
+*/
+
+
+2) hasWaiters(Condition condition)
+方法boolean hasWaiters(Condition condition)的作用是查询是否有线程正在等待与
+此锁定有关的condition条件。
+
+public boolean hasWaiters​(Condition condition)
+Queries whether any threads are waiting on the given condition associated with 
+this lock. Note that because timeouts and interrupts may occur at any time, a 
+true return does not guarantee that a future signal will awaken any threads. 
+This method is designed primarily for use in monitoring of the system state.
+查询是否有任何线程正在等待与之关联的给定条件的锁。注意，由于超时和中断可能在任何时候发生，
+因此真正的返回并不保证将来的信号会唤醒任何线程。该方法主要用于系统状态监测。
+Parameters:
+condition - the condition
+Returns:
+true if there are any waiting threads
+Throws:
+IllegalMonitorStateException - if this lock is not held
+IllegalArgumentException - if the given condition is not associated with this lock
+NullPointerException - if the condition is null
+
+举个例子:
+package chapter04.section01.thread_4_1_11.project_1_lockMethodTest2.test2;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	private ReentrantLock lock = new ReentrantLock();
+	private Condition newCondition = lock.newCondition();
+
+	public void waitMethod() {
+		try {
+			lock.lock();
+			newCondition.await();
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+
+	public void notityMethod() {
+		try {
+			lock.lock();
+			System.out.println("有没有线程正在等待newCondition？"
+					+ lock.hasWaiters(newCondition) + " 线程数是多少？"
+					+ lock.getWaitQueueLength(newCondition));
+			newCondition.signal();
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_11.project_1_lockMethodTest2.test2;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service();
+
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				service.waitMethod();
+			}
+		};
+
+		Thread[] threadArray = new Thread[10];
+		for (int i = 0; i < 10; i++) {
+			threadArray[i] = new Thread(runnable);
+		}
+		for (int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+		Thread.sleep(2000);
+		service.notityMethod();
+	}
+}
+/*
+有没有线程正在等待newCondition？true 线程数是多少？10
+*/
+
+
+3) 方法isFair()、isHeldByCurrentThread()和isLocked()的测试
+
+1) isFair()
+方法boolean isFair()的作用是判断是不是公平锁
+
+public boolean isFair​()
+Returns true if this semaphore has fairness set true.
+Returns:
+true if this semaphore has fairness set true
+
+举例:
+package chapter04.section01.thread_4_1_12.project_1_lockMethodTest3.test1;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	private ReentrantLock lock;
+
+	public Service(boolean isFair) {
+		super();
+		lock = new ReentrantLock(isFair);
+	}
+
+	public void serviceMethod() {
+		try {
+			lock.lock();
+			System.out.println("公平锁情况：" + lock.isFair());
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_12.project_1_lockMethodTest3.test1;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service1 = new Service(true);
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				service1.serviceMethod();
+			}
+		};
+		Thread thread = new Thread(runnable);
+		thread.start();
+
+		final Service service2 = new Service(false);
+		runnable = new Runnable() {
+			@Override
+			public void run() {
+				service2.serviceMethod();
+			}
+		};
+		thread = new Thread(runnable);
+		thread.start();
+	}
+}
+/*
+result：
+公平锁情况：true
+公平锁情况：false
+*/
+
+
+2) isHeldByCurrentThread()
+方法boolean isHeldByCurrentThread()的作用是查询当前线程是否保持此锁定
+
+public boolean isHeldByCurrentThread​()
+Queries if this lock is held by the current thread.
+Analogous to the Thread.holdsLock(Object) method for built-in monitor locks, this 
+method is typically used for debugging and testing. For example, a method that should 
+only be called while a lock is held can assert that this is the case:
+查询当前线程是否持有此锁
+类似内置监视器锁Thread.holdsLock(Object)方法。
+
+ 
+ class X {
+   ReentrantLock lock = new ReentrantLock();
+   // ...
+
+   public void m() {
+       assert lock.isHeldByCurrentThread();
+       // ... method body
+   }
+ }
+It can also be used to ensure that a reentrant lock is used in a non-reentrant manner, 
+for example:
+
+ 
+ class X {
+   ReentrantLock lock = new ReentrantLock();
+   // ...
+
+   public void m() {
+       assert !lock.isHeldByCurrentThread();
+       lock.lock();
+       try {
+           // ... method body
+       } finally {
+           lock.unlock();
+       }
+   }
+ }
+Returns:
+true if current thread holds this lock and false otherwise
+
+举例:
+package chapter04.section01.thread_4_1_12.project_1_lockMethodTest3.test2;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+
+public class Service {
+
+	private ReentrantLock lock;
+
+	public Service(boolean isFair) {
+		super();
+		lock = new ReentrantLock(isFair);
+	}
+
+	public void serviceMethod() {
+		try {
+			System.out.println(lock.isHeldByCurrentThread());
+			lock.lock();
+			System.out.println(lock.isHeldByCurrentThread());
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_12.project_1_lockMethodTest3.test2;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service1 = new Service(true);
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				service1.serviceMethod();
+			}
+		};
+		Thread thread = new Thread(runnable);
+		thread.start();
+	}
+}
+/*
+result：
+false
+true
+*/
+
+
+3) isLocked()
+方法boolean isLocked()的作用是查询此锁定是否由任意线程保持
+
+public boolean isLocked​()
+Queries if this lock is held by any thread. This method is designed for use in 
+monitoring of the system state, not for synchronization control.
+Returns:
+true if any thread holds this lock and false otherwise
+
+举例:
+
+package chapter04.section01.thread_4_1_12.project_1_lockMethodTest3.test3;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	private ReentrantLock lock;
+
+	public Service(boolean isFair) {
+		super();
+		lock = new ReentrantLock(isFair);
+	}
+
+	public void serviceMethod() {
+		try {
+			System.out.println(lock.isLocked());
+			lock.lock();
+			System.out.println(lock.isLocked());
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_12.project_1_lockMethodTest3.test3;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service1 = new Service(true);
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				service1.serviceMethod();
+			}
+		};
+		Thread thread = new Thread(runnable);
+		thread.start();
+	}
+}
+/*
+result：
+false
+true
+*/
+
+
+(4) 方法lockInterruptibly(),tryLock()和tryLock(long timeout, TimeUnit unit)
+的测试
+
+
+1) lockInterruptibly()
+方法void lockInterruptibly()的作用是: 如果当前线程未被中断，则获取锁定，如果已经
+被中断，则出现异常。
+
+文档:
+https://docs.oracle.com/javase/9/docs/api/java/util/concurrent/locks/ReentrantLock.html#lockInterruptibly
+
+举例:
+package chapter04.section01.thread_4_1_13.project_1_lockInterruptiblyTest1;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	public ReentrantLock lock = new ReentrantLock();
+
+	public void waitMethod(){
+		try {
+			lock.lock();
+//			lock.lockInterruptibly();
+			System.out.println("lock begin " 
+			+ Thread.currentThread().getName());
+			for (int i = 0; i < Integer.MAX_VALUE / 10; i++) {
+				String newString = new String();
+				Math.random();
+			}
+			System.out.println("lock   end " 
+					+ Thread.currentThread().getName());
+		} 
+//		catch(InterruptedException e) {
+//				System.out.println("线程"+Thread.currentThread().getName()+"进入catch~!");
+//				e.printStackTrace();
+//		}
+		finally {
+			if (lock.isHeldByCurrentThread()) {
+				lock.unlock();
+			}
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_13.project_1_lockInterruptiblyTest1;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service();
+		Runnable runnableRef = new Runnable() {
+			@Override
+			public void run() {
+				service.waitMethod();
+			}
+		};
+
+		Thread threadA = new Thread(runnableRef);
+		threadA.setName("A");
+		threadA.start();
+		Thread.sleep(500);
+		Thread threadB = new Thread(runnableRef);
+		threadB.setName("B");
+		threadB.start();
+		threadB.interrupt();// 打标记
+		System.out.println("main end!");
+	}
+}
+/*
+result：
+lock begin A
+main end!
+lock   end A
+lock begin B
+lock   end B
+线程B被interrupt设置中断标记了，执行lock.lock()
+不出现异常，正常执行
+
+去掉注释，将lock.lock()换成lock.lockInterruptibly()
+result:
+lock begin A
+main end!
+线程B进入catch~!
+java.lang.InterruptedException
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer.acquireInterruptibly(Unknown Source)
+	at java.base/java.util.concurrent.locks.ReentrantLock.lockInterruptibly(Unknown Source)
+	at chapter04.section01.thread_4_1_13.project_1_lockInterruptiblyTest1.Service.waitMethod(Service.java:13)
+	at chapter04.section01.thread_4_1_13.project_1_lockInterruptiblyTest1.Run$1.run(Run.java:10)
+	at java.base/java.lang.Thread.run(Unknown Source)
+lock   end A
+*/
+
+
+2) tryLock()
+方法boolean tryLock()的作用是，仅在调用时锁定未被另一个线程保持的情况下，才获取该
+锁定
+
+
+文档:
+public boolean tryLock​()
+Acquires the lock only if it is not held by another thread at the time of invocation.
+Acquires the lock if it is not held by another thread and returns immediately with the 
+value true, setting the lock hold count to one. Even when this lock has been set to use 
+a fair ordering policy, a call to tryLock() will immediately acquire the lock if it is 
+available, whether or not other threads are currently waiting for the lock. This "barging" 
+behavior can be useful in certain circumstances, even though it breaks fairness. 
+If you want to honor the fairness setting for this lock, then use tryLock(0, TimeUnit.SECONDS) 
+which is almost equivalent (it also detects interruption).
+只有在调用时其他线程不持有锁时才获得锁。如果锁不是由另一个线程持有，则立即获取该锁，并返回值为true,将锁持有
+计数器设置为1.甚至当这个锁被设置为使用公平顺序政策，调用tryLock()，如果锁可用立即获得锁，不论其他线程
+还在等待此锁。这种"协定"行为在某些情况下是有用的，即使它破坏了公平。如果你想要尊重这个锁的公平设置，那么
+使用tryLock(0, TimeUnit.SECONDS)它几乎是等价的(它也检测中断)
+
+If the current thread already holds this lock then the hold count is incremented by one and 
+the method returns true.
+如果当前线程已经持有此锁，则持有计数器将增加1，并且该方法返回true.
+
+If the lock is held by another thread then this method will return immediately with the value false.
+如果锁被另一个线程持有，那么该方法将立即返回未false
+
+Specified by:
+tryLock in interface Lock
+Returns:
+true if the lock was free and was acquired by the current thread, or the lock was already held 
+by the current thread; and false otherwise
+
+
+举例:
+package chapter04.section01.thread_4_1_13.project_3_tryLockTest;
+
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+	public ReentrantLock lock = new ReentrantLock();
+	
+	public void waitMethod() {
+		if(lock.tryLock()) {
+			System.out.println(Thread.currentThread().getName() + "获得锁");
+		} else {
+			System.out.println(Thread.currentThread().getName() + "没有获得锁");
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_13.project_3_tryLockTest;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service();
+
+		Runnable runnableRef = new Runnable() {
+			@Override
+			public void run() {
+				service.waitMethod();
+			}
+		};
+
+		Thread threadA = new Thread(runnableRef);
+		threadA.setName("A");
+		threadA.start();
+		Thread threadB = new Thread(runnableRef);
+		threadB.setName("B");
+		threadB.start();
+	}
+}
+/*
+result:
+A获得锁
+B没有获得锁
+*/
+
+
+3) tryLock(long timeout, TimeUnit unit)
+方法boolean tryLock(long timeout, TimeUnit unit)的作用是: 如果锁定在给定等待时
+间内没有被另一个线程保持，且当前线程未被中断，获取该锁定。
+
+
+举例:
+package chapter04.section01.thread_4_1_13.project_4_tryLock_param;
+
+import java.util.concurrent.TimeUnit;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+
+	public ReentrantLock lock = new ReentrantLock();
+
+	public void waitMethod() {
+		try {
+			if (lock.tryLock(3, TimeUnit.SECONDS)) {
+				System.out.println("      " + Thread.currentThread().getName()
+						+ "获得锁的时间：" + System.currentTimeMillis());
+				Thread.sleep(10000);
+			} else {
+				System.out.println("      " + Thread.currentThread().getName()
+						+ "没有获得锁");
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		} finally {
+			if (lock.isHeldByCurrentThread()) {
+				lock.unlock();
+			}
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_13.project_4_tryLock_param;
+
+public class Run {
+
+	public static void main(String[] args) throws InterruptedException {
+		final Service service = new Service();
+
+		Runnable runnableRef = new Runnable() {
+			@Override
+			public void run() {
+				System.out.println(Thread.currentThread().getName()
+						+ "调用waitMethod时间：" + System.currentTimeMillis());
+				service.waitMethod();
+			}
+		};
+
+		Thread threadA = new Thread(runnableRef);
+		threadA.setName("A");
+		threadA.start();
+		Thread threadB = new Thread(runnableRef);
+		threadB.setName("B");
+		threadB.start();
+	}
+}
+/*
+result:
+A获得锁
+B没有获得锁
+*/
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
