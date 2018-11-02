@@ -1,0 +1,1163 @@
+5) 方法awaitUninterruptibly()的使用
+
+文档:
+void awaitUninterruptibly​()
+Causes the current thread to wait until it is signalled.
+The lock associated with this condition is atomically released and the 
+current thread becomes disabled for thread scheduling purposes and lies 
+dormant until one of three things happens:
+使当前线程等待，直到它收到信号。与此条件相关联的锁是原子释放的，当前线程对于线程
+调度目的是禁用的，并且一直休眠直到下面三件事之一发生:
+
+Some other thread invokes the signal() method for this Condition and the 
+current thread happens to be chosen as the thread to be awakened; or
+Some other thread invokes the signalAll() method for this Condition; or
+A "spurious wakeup" occurs.
+In all cases, before this method can return the current thread must re-acquire 
+the lock associated with this condition. When the thread returns it is guaranteed 
+to hold this lock.
+其他一些线程调用这个条件的signal()方法，并且当前线程恰好被选择为要唤醒的线程;
+其他一些线程调用这个条件的signalAll()方法
+发生"虚假唤醒"
+对于这些所有的情况，在此方法放回之前，当前线程必须重新获得与此条件关联的锁。当线程返回时，它
+是有保证持有这个锁的。
+
+If the current thread's interrupted status is set when it enters this method, or 
+it is interrupted while waiting, it will continue to wait until signalled. When 
+it finally returns from this method its interrupted status will still be set.
+如果当前线程在进入此方法时设置了中断状态，或它在等待时被中断，它将继续等待直到被通知。
+当它最终从这个方法返回，它的中断状态仍然会被设置
+
+Implementation Considerations
+
+The current thread is assumed to hold the lock associated with this Condition when 
+this method is called. It is up to the implementation to determine if this is the 
+case and if not, how to respond. Typically, an exception will be thrown (such as 
+IllegalMonitorStateException) and the implementation must document that fact.
+当调用此方法时，假定当前线程持有与此条件相关联的锁。这取决于实现，以确定这是否是事实，如果不是，
+如何响应。通常，会抛出异常(如IllegalMonitorStateException)，而实现必须记录该事实。
+
+举例:
+package chapter04.section01.thread_4_1_14.project_1_awaitUninterruptiblyTest_1;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+	
+	private ReentrantLock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	
+	public void testMethod() {
+		try {
+			lock.lock();
+			System.out.println("wait begin");
+			condition.await();
+			System.out.println("wait   end");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+			System.out.println("catch");
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_14.project_1_awaitUninterruptiblyTest_1;
+
+public class MyThread extends Thread{
+	
+	private Service service;
+	
+	public MyThread(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.testMethod();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_14.project_1_awaitUninterruptiblyTest_1;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			Service service = new Service();
+			MyThread myThread = new MyThread(service);
+			myThread.start();
+			Thread.sleep(3000);
+			myThread.interrupt();
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+ result:
+ wait begin
+java.lang.InterruptedException
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.reportInterruptAfterWait(Unknown Source)
+	at java.base/java.util.concurrent.locks.AbstractQueuedSynchronizer$ConditionObject.await(Unknown Source)
+	at chapter04.section01.thread_4_1_14.project_1_awaitUninterruptiblyTest_1.Service.testMethod(Service.java:15)
+	at chapter04.section01.thread_4_1_14.project_1_awaitUninterruptiblyTest_1.MyThread.run(MyThread.java:14)
+catch
+*/
+可以看到抛出异常
+下面换成awaitUninterruptibly()方法
+
+package chapter04.section01.thread_4_1_14.project_2_awaitUninterruptiblyTest_2;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+	
+	private ReentrantLock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	
+	public void testMethod() {
+		try {
+			lock.lock();
+			System.out.println("wait begin");
+			condition.awaitUninterruptibly();
+			System.out.println("wait   end");
+		} finally {
+			lock.unlock();
+		}
+	}
+}
+/*
+result:
+wait begin
+*/
+
+
+6) 方法awaitUntil(Date deadline)的使用
+	
+Causes the current thread to wait until it is signalled or interrupted, or t
+he specified deadline elapses.
+
+
+举例:
+package chapter04.section01.thread_4_1_15.project_1_awaitUntilTest;
+
+import java.util.Calendar;
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Service {
+	private ReentrantLock lock = new ReentrantLock();
+	private Condition condition = lock.newCondition();
+	
+	public void waitMethod() {
+		try {
+			Calendar calendarRef = Calendar.getInstance();
+			calendarRef.add(Calendar.SECOND,  10);
+			lock.lock();
+			System.out.println("wait begin timer=" + System.currentTimeMillis());
+			condition.awaitUntil(calendarRef.getTime());
+			System.out.println("wait   end timer=" + System.currentTimeMillis());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.unlock();
+		}
+	}
+	
+	public void notifyMethod() {
+		try {
+			Calendar calendarRef = Calendar.getInstance();
+			calendarRef.add(Calendar.SECOND, 10);
+			lock.lock();
+			System.out.println("notify begin timer=" + System.currentTimeMillis());
+			condition.signalAll();
+			System.out.println("notify   end timer=" + System.currentTimeMillis());
+		} finally {
+			// TODO: handle finally clause
+			lock.unlock();
+		}
+	}
+}
+
+
+package chapter04.section01.thread_4_1_15.project_1_awaitUntilTest;
+
+public class MyThreadA extends Thread {
+
+	private Service service;
+
+	public MyThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.waitMethod();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_15.project_1_awaitUntilTest;
+
+public class MyThreadB extends Thread {
+
+	private Service service;
+
+	public MyThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+
+	@Override
+	public void run() {
+		service.notifyMethod();
+	}
+}
+
+
+package chapter04.section01.thread_4_1_15.project_1_awaitUntilTest;
+
+public class Run1 {
+	public static void main(String[] args) throws InterruptedException {
+		Service service = new Service();
+		MyThreadA myThreadA = new MyThreadA(service);
+		myThreadA.start();
+	}
+}
+/*
+result:
+可以看到10秒后自动唤醒自己
+wait begin timer=1541125193633
+wait   end timer=1541125203620
+*/
+
+package chapter04.section01.thread_4_1_15.project_1_awaitUntilTest;
+
+public class Run2 {
+
+	public static void main(String[] args) throws InterruptedException {
+		Service service = new Service();
+		MyThreadA myThreadA = new MyThreadA(service);
+		myThreadA.start();
+
+		Thread.sleep(2000);
+
+		MyThreadB myThreadB = new MyThreadB(service);
+		myThreadB.start();
+	}
+}
+/*
+result:
+2秒之后被其他线程唤醒,说明线程在等待时间到达前，可以被其他
+线程提前唤醒
+wait begin timer=1541125265293
+notify begin timer=1541125267264
+notify   end timer=1541125267266
+wait   end timer=1541125267266
+*/
+
+
+7) 使用Condition实现顺序执行
+使用Condition对象可以对线程执行的业务进行排序规划
+
+举例:
+package chapter04.section01.thread_4_1_16.project_1_conditon123;
+
+import java.util.concurrent.locks.Condition;
+import java.util.concurrent.locks.ReentrantLock;
+
+public class Run {
+	volatile private static int nextPrintWho = 1;
+	private static ReentrantLock lock = new ReentrantLock();
+	final private static Condition conditionA = lock.newCondition();
+	final private static Condition conditionB = lock.newCondition();
+	final private static Condition conditionC = lock.newCondition();
+	
+	public static void main(String[] args) {
+		Thread threadA = new Thread() {
+			@Override 
+			public void run() {
+				try {
+					lock.lock();
+					while(nextPrintWho != 1) {
+						conditionA.await();
+						System.out.println("ThreadA等待!");
+					}
+					for(int i = 0; i < 3; i++) {
+						System.out.println("ThreadA " + (i + 1));
+					}
+					nextPrintWho = 2;
+					conditionB.signalAll();
+				} catch (InterruptedException e) {
+					// TODO: handle exception
+					e.printStackTrace();
+				} finally {
+					lock.unlock();
+				}
+			}
+		};
+		
+		Thread threadB = new Thread(){
+			@Override
+			public void run() {
+				try {
+					lock.lock();
+					while(nextPrintWho != 2) {
+						conditionB.await();
+						System.out.println("ThreadB等待!");
+					}
+					for(int i = 0; i < 3; i++) {
+						System.out.println("ThreadB " + (i + 1));
+					}
+					nextPrintWho = 3;
+					conditionC.signalAll();
+				} catch (Exception e) {
+					// TODO: handle exception
+					e.printStackTrace();
+				} finally {
+					lock.unlock();
+				}
+			}
+		};
+		
+		Thread threadC = new Thread() {
+			public void run() {
+				try {
+					lock.lock();
+					while (nextPrintWho != 3) {
+						conditionC.await();
+						System.out.println("ThreadC等待!");
+					}
+					for (int i = 0; i < 3; i++) {
+						System.out.println("ThreadC " + (i + 1));
+					}
+					nextPrintWho = 1;
+					conditionA.signalAll();
+				} catch (InterruptedException e) {
+					e.printStackTrace();
+				} finally {
+					lock.unlock();
+				}
+			}
+		};
+		
+		Thread[] aArray = new Thread[5];
+		Thread[] bArray = new Thread[5];
+		Thread[] cArray = new Thread[5];
+		
+		for(int i = 0; i < 5; i++) {
+			aArray[i] = new Thread(threadA);
+			bArray[i] = new Thread(threadB);
+			cArray[i] = new Thread(threadC);
+			
+			aArray[i].start();
+			bArray[i].start();
+			cArray[i].start();
+		}
+	}
+}
+/*
+result:
+ThreadA 1
+ThreadA 2
+ThreadA 3
+ThreadB 1
+ThreadB 2
+ThreadB 3
+ThreadC 1
+ThreadC 2
+ThreadC 3
+ThreadA 1
+ThreadA 2
+ThreadA 3
+ThreadB 1
+ThreadB 2
+ThreadB 3
+ThreadC 1
+ThreadC 2
+ThreadC 3
+ThreadC等待!
+ThreadC等待!
+ThreadA 1
+ThreadA 2
+ThreadA 3
+ThreadB等待!
+ThreadB 1
+ThreadB 2
+ThreadB 3
+ThreadB等待!
+ThreadC等待!
+ThreadC 1
+ThreadC 2
+ThreadC 3
+ThreadA等待!
+ThreadA 1
+ThreadA 2
+ThreadA 3
+ThreadA等待!
+ThreadB等待!
+ThreadB 1
+ThreadB 2
+ThreadB 3
+ThreadC等待!
+ThreadC 1
+ThreadC 2
+ThreadC 3
+ThreadC等待!
+ThreadB等待!
+ThreadA等待!
+ThreadA 1
+ThreadA 2
+ThreadA 3
+ThreadB等待!
+ThreadB 1
+ThreadB 2
+ThreadB 3
+ThreadC等待!
+ThreadC 1
+ThreadC 2
+ThreadC 3
+*/
+
+
+
+4. 使用ReentrantReadWriteLock类
+	类ReentrantLock具有完全互斥排它的效果，即同一时间只有一个线程在执行Reentr
+antLock()方法后面的任务。这样做虽然保证了实例变量的线程安全性，但效率却是非常低下
+的。所以在JDK提供了一种读写锁ReentrantReadWriteLock类，使用它可以加快运行效率，
+在某些不需要操作实例变量的方法中，完全可以使用读写锁ReentrantReadWriteLock来提升
+该方法的代码运行速度。
+	读写锁表示也有两个锁，一个是读操作相关的锁，也称为共享锁;另一个是写操作相关的
+锁，也叫排它锁。也就是多个读锁之间不互斥，读锁与写锁互斥，写锁与写锁互斥。多个Thread
+可以同时进行读取操作，但是同一时刻只允许一个Thread进行写入操作。读写锁的最大功能在于
+读共享写独占，从而在读多写少的场景下能够提升并发性能。
+
+
+
+(1) 文档阅读 
+ReentrantReadWriteLock类及ReentrantReadWriteLock.ReadLock类及ReentrantReadWriteLock.WriteLock类
+
+文档:
+ReentrantReadWriteLock类:
+
+public class ReentrantReadWriteLock
+extends Object
+implements ReadWriteLock, Serializable
+An implementation of ReadWriteLock supporting similar semantics to ReentrantLock.
+This class has the following properties:
+ReadWriteLock的一个实现，支持类似ReentrantLock的语义。
+这个类有以下的属性:
+
+Acquisition order
+This class does not impose a reader or writer preference ordering for lock access. 
+However, it does support an optional fairness policy.
+获得顺序
+这个类不会为锁的获取强加一个读取或写入倾向顺序。然而，它确实支持一个可选择的公平策略。
+
+Non-fair mode (default)
+When constructed as non-fair (the default), the order of entry to the read and write 
+lock is unspecified, subject to reentrancy constraints. A nonfair lock that is 
+continuously contended may indefinitely postpone one or more reader or writer 
+threads, but will normally have higher throughput than a fair lock.
+非公平模式(默认)
+当构造为非公平(默认情况下)时，读和写锁的进入顺序是不指定的，这却取决于可重入性约束。持续竞争的非
+公平锁可能无限期地延迟一个或多个读或写线程。但通常具有比公平锁更高的吞吐量。
+
+
+Fair mode
+When constructed as fair, threads contend for entry using an approximately 
+arrival-order policy. When the currently held lock is released, either the 
+longest-waiting single writer thread will be assigned the write lock, or if 
+there is a group of reader threads waiting longer than all waiting writer threads, 
+that group will be assigned the read lock.
+A thread that tries to acquire a fair read lock (non-reentrantly) will block if 
+either the write lock is held, or there is a waiting writer thread. The thread will 
+not acquire the read lock until after the oldest currently waiting writer thread has 
+acquired and released the write lock. Of course, if a waiting writer abandons its wait, 
+leaving one or more reader threads as the longest waiters in the queue with the write 
+lock free, then those readers will be assigned the read lock.
+当以公平的方式构造时，线程使用近似到达顺序策略争用进入。当当前持有的锁被释放时，等待时间最长
+的单个写线程将被分配写锁，或者如果有一组等待的读线程比所有等待的写线程都长，那么该组将被分配读锁。
+一个线程试图获得一个公平读锁(非reentrantly),如果持有写锁，或正在等待写锁，要么有一个等待的写线程。
+这个线程将不会获得读锁，直到当前等待时间最久的写线程获得并释放写锁之后，线程才会获得读锁。当然，如果
+等待写入者放弃了它的等待并释放了写锁，将一个或多个读线程作为队列中的最长等待者，那么这些读线程将
+被分配读锁。
+
+A thread that tries to acquire a fair write lock (non-reentrantly) will block unless
+both the read lock and write lock are free (which implies there are no waiting threads). 
+(Note that the non-blocking ReentrantReadWriteLock.ReadLock.tryLock() and 
+ReentrantReadWriteLock.WriteLock.tryLock() methods do not honor this fair setting 
+and will immediately acquire the lock if it is possible, regardless of waiting threads.)
+试图获得公平写锁(非reentrantly)的线程将阻塞，除非读锁和写锁都是空闲的(意味着没有等待的线程)。
+读锁和写锁类重写的tryLock方法不支持这个公平的设置，尽可能的立即获得锁，而不考虑等待线程。
+
+Reentrancy 可重入性
+This lock allows both readers and writers to reacquire read or write locks in the 
+style of a ReentrantLock. Non-reentrant readers are not allowed until all write 
+locks held by the writing thread have been released.
+这个锁允许读者和写者以ReentrantLock的方式重新获得读锁或写锁。在写入线程持有的所有写锁被释放
+之前，不允许使用不可重入的读取器。
+
+Additionally, a writer can acquire the read lock, but not vice-versa. Among other 
+applications, reentrancy can be useful when write locks are held during calls or 
+callbacks to methods that perform reads under read locks. If a reader tries to 
+acquire the write lock it will never succeed.
+此外，写者可以获得读锁，反之亦然。在其他应用程序中，当在调用期间持有写锁或对在读锁下执行读取
+的方法进行回调时，可重入性非常有用。如果读者试图获得写锁，它将永远不会成功。
+
+Lock downgrading
+Reentrancy also allows downgrading from the write lock to a read lock, by 
+acquiring the write lock, then the read lock and then releasing the write lock. 
+However, upgrading from a read lock to the write lock is not possible.
+锁降级
+重入还允许将写锁降级为读锁，通过获取写锁，然后获取读锁，然后释放写锁。然而，从读锁升级到写锁
+是不可能的。
+
+Interruption of lock acquisition
+The read lock and write lock both support interruption during lock acquisition.
+锁捕获中断
+读锁和写锁都支持在获取锁期间中断
+
+Condition support
+The write lock provides a Condition implementation that behaves in the same way, 
+with respect to the write lock, as the Condition implementation provided by 
+ReentrantLock.newCondition() does for ReentrantLock. This Condition can, of 
+course, only be used with the write lock.
+条件支持
+写锁提供的条件实现与ReentrantLock.newCondition()提供的条件实现在写锁方面的行为相同。
+这个条件当然可以，只能与写锁一起使用。
+
+The read lock does not support a Condition and readLock().newCondition() 
+throws UnsupportedOperationException.
+读写不支持条件和readLock().newCondtion()将抛出UnsupportedOperationException
+
+Instrumentation 工具
+This class supports methods to determine whether locks are held or contended. 
+These methods are designed for monitoring system state, not for synchronization control.
+该类支持确定锁是否被持有或竞争的方法。这些方法是为监视系统状态而设计的，而不是为同步控制而设计的。
+
+Serialization of this class behaves in the same way as built-in locks: a 
+deserialized lock is in the unlocked state, regardless of its state when serialized.
+这个类的序列化行为与内置锁形同: 一个反序列化的锁是在未锁状态，忽略序列化时的状态
+
+Sample usages. Here is a code sketch showing how to perform lock downgrading after
+updating a cache (exception handling is particularly tricky when handling multiple 
+locks in a non-nested fashion):
+示例用法。下面是代码草图，展示了如何在锁降级之后执行锁降级更新缓存(当处理多个非嵌套锁，异常处理
+是非常棘手的)
+
+ 
+ class CachedData {
+   Object data;
+   boolean cacheValid;
+   final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+
+   void processCachedData() {
+     rwl.readLock().lock();
+     if (!cacheValid) {
+       // Must release read lock before acquiring write lock
+       rwl.readLock().unlock(); //如果不释放，就属于锁升级，会产生死锁
+       rwl.writeLock().lock();
+       try {
+         // Recheck state because another thread might have
+         // acquired write lock and changed state before we did.
+         if (!cacheValid) {
+           data = ...
+           cacheValid = true;
+         }
+         // Downgrade by acquiring read lock before releasing write lock
+         rwl.readLock().lock(); //可以看到这里进行了锁降级，写锁降级为读锁
+       } finally {
+       //最后一定要释放写锁，否则别的线程的不到写锁，这也就意味着，其他线程要进行写操作的阻塞住，直到释放
+         rwl.writeLock().unlock(); // Unlock write, still hold read
+       }
+     }
+
+     try {
+       use(data);
+     } finally {
+       rwl.readLock().unlock();
+     }
+   }
+ }
+ReentrantReadWriteLocks can be used to improve concurrency in some uses of some 
+kinds of Collections. This is typically worthwhile only when the collections are 
+expected to be large, accessed by more reader threads than writer threads, 
+and entail operations with overhead that outweighs synchronization overhead. 
+For example, here is a class using a TreeMap that is expected to be large and 
+concurrently accessed.
+ReentrantReadWriteLocks可以用于在某些集合的某些用途中改进并发性。通常，只有当集合被认为是
+大的、被更多的读线程访问而不是写线程访问，并且需要开销大于同步开销的操作时，才值得这样做。
+例如，这里有一个使用TreeMap类，它应该是大型的，并且可以并发访问。
+ 
+ class RWDictionary { //可以看到对TreeMap进行操作，TreeMap是非线程安全的
+   private final Map<String, Data> m = new TreeMap<>();
+   private final ReentrantReadWriteLock rwl = new ReentrantReadWriteLock();
+   private final Lock r = rwl.readLock();
+   private final Lock w = rwl.writeLock();
+
+   public Data get(String key) {
+     r.lock();
+     try { return m.get(key); }
+     finally { r.unlock(); }
+   }
+   public List<String> allKeys() {
+     r.lock();
+     try { return new ArrayList<>(m.keySet()); }
+     finally { r.unlock(); }
+   }
+   public Data put(String key, Data value) {
+     w.lock();
+     try { return m.put(key, value); }
+     finally { w.unlock(); }
+   }
+   public void clear() {
+     w.lock();
+     try { m.clear(); }
+     finally { w.unlock(); }
+   }
+ }
+Implementation Notes
+
+This lock supports a maximum of 65535 recursive write locks and 65535 read 
+locks. Attempts to exceed these limits result in Error throws from locking methods.
+这个锁最多支持65535递归写锁和65535读锁。试图超过这些限制会导致锁定方法的Error抛出
+
+Since:
+1.5
+
+
+
+ReentrantReadWriteLock.ReadLock类
+public static class ReentrantReadWriteLock.ReadLock
+extends Object
+implements Lock, Serializable
+The lock returned by method ReentrantReadWriteLock.readLock().
+
+
+ReentrantReadWriteLock.WriteLock类
+public static class ReentrantReadWriteLock.WriteLock
+extends Object
+implements Lock, Serializable
+The lock returned by method ReentrantReadWriteLock.writeLock().
+
+(2) ReentrantReadWriteLock中的锁降级和锁升级
+在翻译文档的时候我们可以看到读写锁支持锁降级而不支持锁升级。这个是非常重要的
+
+什么是锁降级和锁升级?
+锁降级: 从写锁变成读锁
+锁升级: 从读锁变成写锁。
+读锁是可以被多线程共享的，写锁是单线程独占的。也就是说写锁的并发限制比读锁高，这可
+能就是升级/降级名称的来源.
+
+如下代码会产生死锁，因为同一个线程中，在没有释放读锁的情况下，就去申请写锁，这属
+于锁升级，ReentrantReadWriteLock是不支持的
+ReadWriteLock rtLock = new ReentrantReadWriteLock();
+rtLock.readLock().lock();
+System.out.println("get readLock.");
+rtLock.writeLock().lock();
+System.out.println("blocking");
+
+ReentrantReadWriteLock支持锁降级，如下代码不会产生死锁。
+ReadWriteLock rtLock = new ReentrantReadWriteLock();
+rtLock.writeLock().lock();
+System.out.println("writeLock");
+ 
+rtLock.readLock().lock();
+System.out.println("get read lock");
+这段代码虽然不会导致死锁，但没有正确的释放锁。从写锁降级成读锁，并不会自动释放当前线程获取的写锁，
+仍然需要显示的释放，否则别的线程永远也获取不到写锁。
+
+一个线程获取多少次锁，就必须释放多少次锁，这对于内置锁也是适用的，每一次进入和离开synchronized
+方法或同步语句块，就是一次完整的锁获取和释放。
+
+锁降级的理解:
+我们可以从Java设计者们的角度想，其实不难理解:
+其实也不难理解，只要线程获取写锁，那么这一刻只有这一个线程可以在临界区操作，它自己写完的东西，自
+己的是可以看见的，所以写锁降级为读锁是非常自然的一种行为，并且几乎没有任何性能影响，但是反过来就
+不一定行的通了，因为读锁是共享的，也就是说同一时刻有大量的读线程都在临界区读取资源，如果可以允许
+读锁升级为写锁，这里面就涉及一个很大的竞争问题，所有的读锁都会去竞争写锁，这样以来必然引起巨大的
+抢占，这是非常复杂的，因为如果竞争写锁失败，那么这些线程该如何处理？是继续还原成读锁状态，还是升
+级为竞争写锁状态？这一点是不好处理的，所以Java的api为了让语义更加清晰，所以只支持写锁降级为读锁
+,不支持读锁升级为写锁。
+
+
+锁降级的必要性:
+锁降级中读锁的获取是否必要呢？答案是必要的。主要是为了保证数据的可见性，如果当前线程不获取读锁而是
+直接释放写锁， 假设此刻另一个线程（记作线程T）获取了写锁并修改了数据，那么当前线程无法感知线程T的
+数据更新。如果当前线程获取读锁，即遵循锁降级的步骤，则线程T将会被阻塞，直到当前线程使用数据并释放
+读锁之后，线程T才能获取写锁进行数据更新。
+这里要着重讲一讲“无法感知”是什么意思：
+
+也就是说，在另一个线程（假设叫线程1）修改数据的那一个瞬间，当前线程（线程2）是不知道数据此时已经
+变化了，但是并不意味着之后线程2使用的数据就是旧的数据，相反线程2使用还是被线程1更新之后的数据。
+也就是说，就算我不使用锁降级，程序的运行结果也是正确的（这是因为锁的机制和volatile关键字相似）。
+
+那么为什么还要锁降级呢，其实目的是为了减少线程的阻塞唤醒。明显当不使用锁降级，线程2修改数据时，
+线程1自然要被阻塞，而使用锁降级时则不会。“感知”其实是想强调读的实时连续性，但是却容易让人误导为
+强调数据操作。
+
+
+
+(3) 实战
+
+1) 类ReentrantReadWriteLock的使用: 读读共享
+举例:
+package chapter04.section02.project_1_ReadWriteLockBegin1;
+
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+public class Service {
+	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+	
+	public void read() {
+		try {
+			lock.readLock().lock();
+			System.out.println("获得读锁" + Thread.currentThread().getName()
+					+ " " + System.currentTimeMillis());
+			Thread.sleep(10000);
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.readLock().unlock();
+		}
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin1;
+
+public class ThreadA extends Thread {
+
+	private Service service;
+	
+	public ThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.read();
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin1;
+
+public class ThreadB extends Thread {
+
+	private Service service;
+	
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.read();
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin1;
+
+public class Run {
+	public static void main(String[] args) {
+		Service service = new Service();
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		
+		a.start();
+		b.start();
+	}
+}
+/*
+result:
+获得读锁A 1541148175910
+获得读锁B 1541148175911
+*/
+
+
+2) 类ReentrantReadWriteLock的使用: 写写互斥
+举例:
+
+package chapter04.section02.project_1_ReadWriteLockBegin2;
+
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+public class Service {
+	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+	
+	public void write() {
+		try {
+			lock.writeLock().lock();
+			System.out.println("获得写锁" + Thread.currentThread().getName()
+					+ " " + System.currentTimeMillis());
+			Thread.sleep(10000);
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} finally {
+			lock.writeLock().unlock();
+		}
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin2;
+
+public class ThreadA extends Thread {
+
+	private Service service;
+	
+	public ThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.write();
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin2;
+
+public class ThreadB extends Thread {
+
+	private Service service;
+	
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.write();
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin2;
+
+public class Run {
+	public static void main(String[] args) {
+		Service service = new Service();
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		
+		a.start();
+		b.start();
+	}
+}
+/*
+result:
+获得写锁A 1541148411610
+获得写锁B 1541148421610
+*/
+结果分析:
+可以看到过了10秒之后B线程获得了写锁。使用写锁代码lock.writeLock()的效果就是同一时间只允许一个
+线程执行lock()方法后面的代码
+
+
+3) 类ReentrantReadWriteLock的使用: 读写互斥/写读互斥
+举例:
+package chapter04.section02.project_1_ReadWriteLockBegin3;
+
+import java.util.concurrent.locks.ReentrantReadWriteLock;
+
+public class Service {
+
+	private ReentrantReadWriteLock lock = new ReentrantReadWriteLock();
+
+	public void read() {
+		try {
+			try {
+				lock.readLock().lock();
+				System.out.println("获得读锁" + Thread.currentThread().getName()
+						+ " " + System.currentTimeMillis());
+				Thread.sleep(10000);
+			} finally {
+				lock.readLock().unlock();
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+
+	public void write() {
+		try {
+			try {
+				lock.writeLock().lock();
+				System.out.println("获得写锁" + Thread.currentThread().getName()
+						+ " " + System.currentTimeMillis());
+				Thread.sleep(10000);
+			} finally {
+				lock.writeLock().unlock();
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin3;
+
+public class ThreadA extends Thread {
+
+	private Service service;
+	
+	public ThreadA(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.read();
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin3;
+
+public class ThreadB extends Thread {
+
+	private Service service;
+	
+	public ThreadB(Service service) {
+		super();
+		this.service = service;
+	}
+	
+	@Override
+	public void run() {
+		service.write();
+	}
+}
+
+
+package chapter04.section02.project_1_ReadWriteLockBegin3;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException{
+		Service service = new Service();
+		ThreadA a = new ThreadA(service);
+		a.setName("A");
+		a.start();
+		
+		Thread.sleep(1000);
+		
+		ThreadB b = new ThreadB(service);
+		b.setName("B");
+		b.start();
+	}
+}
+/*
+result:
+获得读锁A 1541148794846
+获得写锁B 1541148804848
+*/
+
+
+结论: "读写"、"写读"和"写写"都是互斥的;而"读读"是异步的，非互斥的学习Lock是synchronized
+关键字的进阶，掌握Lock有助于学习并发包中源代码的实现原理，在并发包中大量的类使用了Lock接
+口作为同步的处理方式。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
