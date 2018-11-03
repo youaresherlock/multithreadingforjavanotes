@@ -1,0 +1,1362 @@
+第五章
+
+定时器Timer
+
+定时/计划功能在移动开发领域使用较多，比如Android技术、定时计划任务功能
+在Java中的主要使用的就是Timer对象，它的内部还是使用多线程的方式进行处
+理，所以它和线程技术还是有很大的关联的。
+本章主要掌握以下技术点:
+1) 如何实现指定时间执行任务
+2) 如何实现按指定周期执行任务
+
+
+
+定时器Timer的简介:
+在JDK库中，Timer类主要负责计划任务的功能，也就是在指定的时间开始执行某
+一个任务Timer.Timer类的主要作用就是设置任务计划，但封装任务的类却是
+TimerTask类。执行计划任务的代码要放入TimerTask的子类中，因为TimerTas
+k是一个抽象类。
+
+文档翻译:
+Timer类(要注意默认情况下是个非守护线程):
+
+public class Timer
+extends Object
+A facility for threads to schedule tasks for future execution in a background thread. 
+Tasks may be scheduled for one-time execution, or for repeated execution at regular intervals.
+Corresponding to each Timer object is a single background thread that is used to 
+execute all of the timer's tasks, sequentially. Timer tasks should complete quickly. 
+If a timer task takes excessive time to complete, it "hogs" the timer's task execution 
+thread. This can, in turn, delay the execution of subsequent tasks, which may "bunch up"
+and execute in rapid succession when (and if) the offending task finally completes.
+用于线程调度任务，并在后台未来中执行的一个工具。
+任务可以被安排为因此执行，也可以安排为定期重复执行。对应于每个计数器对象的是一个使用的单一后台线程，
+按顺序执行计数器的所有任务。计时器任务应该很快完成，如果一个计时器任务需要过多的时间来完成，它会占用
+计时器任务的执行时间。这反过来又会延迟后续任务的执行，如果恼人的任务最重完成时，后续任务可能会"堆积"
+并迅速连续执行。
+
+After the last live reference to a Timer object goes away and all outstanding tasks have 
+completed execution, the timer's task execution thread terminates gracefully (and becomes 
+subject to garbage collection). However, this can take arbitrarily long to occur. By default, 
+the task execution thread does not run as a daemon thread, so it is capable of keeping an 
+application from terminating. If a caller wants to terminate a timer's task execution thread 
+rapidly, the caller should invoke the timer's cancel method.
+在对计时器对象的最后一次实时引用消失且所有未完成的任务都已完成执行之后，计时器的任务执行线程将优雅地
+终止并且成为垃圾收集的对象。然而，这可能需要任意长的时间。默认情况下，任务执行线程不作为守护线程运行，因此
+它能够防止应用程序终止。如果调用者希望快速终止计时器的任务执行线程，则调用方应该调用计时器的cancel方法。
+
+If the timer's task execution thread terminates unexpectedly, for example, because its stop
+method is invoked, any further attempt to schedule a task on the timer will result in an 
+IllegalStateException, as if the timer's cancel method had been invoked.
+例如，如果计时器的任务执行线程意外终止，因为调用了它的停止方法，那么在计时器上安排一个任务的尝试将抛出
+IllegalStateException异常，就好像计时器的cancel方法被触发一样。
+
+This class is thread-safe: multiple threads can share a single Timer object without the 
+need for external synchronization.
+这个类是线程安全的: 多个线程可以共享一个计时器对象，而不需要外部的同步。
+
+This class does not offer real-time guarantees: it schedules tasks using the Object.wait(long) method.
+这个类不提供实时保证: 它使用Object.wait(long)方法调度任务。
+
+Java 5.0 introduced the java.util.concurrent package and one of the concurrency utilities 
+therein is the ScheduledThreadPoolExecutor which is a thread pool for repeatedly executing 
+tasks at a given rate or delay. It is effectively a more versatile replacement for the 
+Timer/TimerTask combination, as it allows multiple service threads, accepts various time 
+units, and doesn't require subclassing TimerTask (just implement Runnable). Configuring 
+ScheduledThreadPoolExecutor with one thread makes it equivalent to Timer.
+Java5.0 引入了并发的包，以及一个并发工具ScheduledThreadPoolExecutor，它是一个线程池，用于以给定
+速率或延迟重复执行任务。它可以有效地替代计时器/TimerTask组合，因为它允许多个服务线程接受不同的单元，
+并且不需要子类化TimerTask(只需要实现Runnable).使用一个线程配置ScheduledThreadPoolExecutor就相当于
+计时器。
+
+Implementation note: This class scales to large numbers of concurrently scheduled tasks 
+(thousands should present no problem). Internally, it uses a binary heap to represent its 
+task queue, so the cost to schedule a task is O(log n), where n is the number of 
+concurrently scheduled tasks.
+实现注意: 这个类可以扩展到大量并发调度任务(数千个任务应该没有问题)。在内部，它使用一个二进制堆来表示
+其任务队列，因此调度任务的成本是O(logn),其中n是并发调度任务的数量
+
+Implementation note: All constructors start a timer thread.
+实现注意:所有构造函数启动一个计时器线程。
+
+TimerTask类:
+public abstract class TimerTask
+extends Object
+implements Runnable
+A task that can be scheduled for one-time or repeated execution by a Timer.
+A timer task is not reusable. Once a task has been scheduled for execution on a Timer or 
+cancelled, subsequent attempts to schedule it for execution will throw IllegalStateException.
+一个任务可以由计数器安排执行一次或重复执行。一旦一个任务被安排执行在一个计时器或取消了，这个计时器任务
+不可重用，随后的尝试安排它执行将抛出IllegalStateException异常
+
+
+
+(1) 方法schedule(TimerTask task, Data time)的测试
+该方法的作用是在指定的日期执行一次某一任务
+
+1) 执行任务的时间晚于当前时间--在未来执行的效果
+
+package chapter05.section1.thread_5_1_1.project_1_timerTest1;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTask extends TimerTask {
+	
+	@Override
+	public void run() {
+		System.out.println("任务执行了， 时间为: " + new Date());
+	}
+}
+
+
+package chapter05.section1.thread_5_1_1.project_1_timerTest1;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test1 {
+	public static void main(String[] args) {
+		System.out.println("当前时间为: " + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.add(Calendar.SECOND, 10);
+		Date runDate = calendarRef.getTime();
+		
+		MyTask task = new MyTask();
+		Timer timer = new Timer();
+		timer.schedule(task, runDate);
+	}
+}
+/*
+result:
+当前时间为: Sat Nov 20 13:09:39 CST 2017
+任务执行了， 时间为: Sat Nov 20 13:09:49 CST 2017
+可以看到还在运行
+*/
+
+package chapter05.section1.thread_5_1_1.project_1_timerTest1;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test2 {
+	public static void main(String[] args) {
+		System.out.println("当前时间为: " + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.add(Calendar.SECOND, 10);
+		Date runDate = calendarRef.getTime();
+		
+		MyTask task = new MyTask();
+		//守护线程
+		Timer timer = new Timer(true);
+		timer.schedule(task, runDate);
+	}
+}
+/*
+result:
+当前时间为: Sat Nov 20 13:09:39 CST 2017
+可以看到进程直接结束了，因为当进程中不存在非守护线程了，则守护线程自动
+销毁
+*/
+
+
+结果分析:
+任务虽然执行完了，但进程还未销毁，呈红色状态
+可以看Timer类中的如下代码:
+
+下面是调用有参构造函数了，然后利用原子类AtomicInteger设置计时器名称
+    /**
+     * This ID is used to generate thread names.
+     */
+    private final static AtomicInteger nextSerialNumber = new AtomicInteger(0);
+    private static int serialNumber() {
+        return nextSerialNumber.getAndIncrement();
+    }
+
+    /**
+     * Creates a new timer.  The associated thread does <i>not</i>
+     * {@linkplain Thread#setDaemon run as a daemon}.
+     */
+    public Timer() {
+        this("Timer-" + serialNumber());
+    }
+这是有参构造器，可以看到是启动一个新的线程，但是注意这个线程的非守护特
+性是从main线程中获得的。
+ public Timer(String name) {
+        thread.setName(name);
+        thread.start();
+    }
+
+即，创建1个Timer就是启动1个新的线程，那么这个新启动的线程并不是守护线程
+，一直在运行。
+
+
+
+2) 执行时间早于当前时间--提前运行的效果
+如果执行任务的时间早于当前时间，则立即执行task任务
+
+package chapter05.section1.thread_5_1_1.project_2_timerTest2;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTask extends TimerTask {
+	
+	@Override
+	public void run() {
+		System.out.println("任务执行了， 时间为: " + new Date());
+	}
+}
+
+
+package chapter05.section1.thread_5_1_1.project_2_timerTest2;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test1 {
+	public static void main(String[] args) {
+		System.out.println("当前时间为: " + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.add(Calendar.SECOND, calendarRef.get(Calendar.SECOND) - 10);
+		Date runDate = calendarRef.getTime();
+		System.out.println("计划时间为: " + runDate);
+		
+		MyTask task = new MyTask();
+		Timer timer = new Timer();
+		timer.schedule(task, runDate);
+	}
+}
+/*
+result:
+当前时间为: Sat Nov 03 14:24:17 CST 2018
+计划时间为: Sat Nov 03 14:24:07 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:24:17 CST 2018
+*/
+可以看到任务提前执行了
+
+
+3) Timer中允许有多个TimerTask任务及延时的测试
+我们在上面的程序中创建Test2.java类
+package chapter05.section1.thread_5_1_1.project_2_timerTest2;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test2 {
+	public static void main(String[] args) {
+		System.out.println("当前时间为: " + new Date());
+		Calendar calendarRef1 = Calendar.getInstance();
+		calendarRef1.add(Calendar.SECOND, 10);
+		Date runDate1 = calendarRef1.getTime();
+		System.out.println("计划时间为: " + runDate1);
+		
+		Calendar calendarRef2 = Calendar.getInstance();
+		calendarRef2.add(Calendar.SECOND, 15);
+		Date runDate2 = calendarRef2.getTime();
+		System.out.println("计划时间为: " + runDate2);
+		
+		MyTask task1 = new MyTask();
+		MyTask task2 = new MyTask();
+		Timer timer = new Timer();
+		timer.schedule(task1, runDate1);
+		timer.schedule(task2, runDate2);
+	}
+}
+/*
+result:
+当前时间为: Sat Nov 03 14:34:47 CST 2018
+计划时间为: Sat Nov 03 14:34:57 CST 2018
+计划时间为: Sat Nov 03 14:35:02 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:34:57 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:35:02 CST 2018
+*/
+结果分析: 
+TimerTask是以队列的方式一个一个被顺序地执行，所以执行的时间有可能和预期
+的时间不一致，因为前面的时间有可能消耗的时间较长，则后面的任务运行的时间
+也被延后
+
+
+看下面的例子:
+package chapter05.section1.thread_5_1_1.project_3_taskLater;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTaskA extends TimerTask{
+	@Override
+	public void run() {
+		try {
+			System.out.println("A begin timer = " + new Date());
+			Thread.sleep(20000);
+			System.out.println("A   end timer = " + new Date());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter05.section1.thread_5_1_1.project_3_taskLater;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTaskB extends TimerTask{
+	@Override
+	public void run() {
+		System.out.println("B begin timer = " + new Date());
+		System.out.println("B   end timer = " + new Date());
+	}
+}
+
+
+package chapter05.section1.thread_5_1_1.project_3_taskLater;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test {
+	public static void main(String[] args) {
+		System.out.println("当前时间为：" + new Date());
+		Calendar calendarRef1 = Calendar.getInstance();
+		Date runDate1 = calendarRef1.getTime();
+		System.out.println("A计划时间为：" + runDate1);
+		
+		Calendar calendarRef2 = Calendar.getInstance();
+		calendarRef2.add(Calendar.SECOND, 10);
+		Date runDate2 = calendarRef2.getTime();
+		System.out.println("B计划时间为：" + runDate2);
+		
+		MyTaskA task1 = new MyTaskA();
+		MyTaskB task2 = new MyTaskB();
+		
+		Timer timer = new Timer();
+		timer.schedule(task1, runDate1);
+		timer.schedule(task2, runDate2);		
+	}
+}
+/*
+result:
+当前时间为：Sat Nov 03 14:42:14 CST 2018
+A计划时间为：Sat Nov 03 14:42:14 CST 2018
+B计划时间为：Sat Nov 03 14:42:24 CST 2018
+A begin timer = Sat Nov 03 14:42:14 CST 2018
+A   end timer = Sat Nov 03 14:42:34 CST 2018
+B begin timer = Sat Nov 03 14:42:34 CST 2018
+B   end timer = Sat Nov 03 14:42:34 CST 2018
+*/
+结果分析:
+在代码中设置的task1和task2任务的时间间隔是10秒，但是task1需要20秒完成
+任务，所以task1结束的时间就是task2开始的时间，不再以10秒做为参考。原理
+还是因为Task是放入队列中的，得一个一个的运行。
+
+
+
+(2) 方法schedule(TimerTask task, Date firstTime, long period)的测试
+该方法的作用是在指定的日期之后按指定的间隔周期，无限循环地执行某一任务
+
+1) 计划时间晚于当前时间--在未来执行的效果
+package chapter05.section1.thread_5_1_2.project_1_timerTest2_period;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTask extends TimerTask {
+	
+	@Override
+	public void run() {
+		System.out.println("任务执行了， 时间为: " + new Date());
+	}
+}
+
+
+package chapter05.section1.thread_5_1_2.project_1_timerTest2_period;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test1 {
+	public static void main(String[] args) {
+		System.out.println("当前时间为: " + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.add(Calendar.SECOND, 10);
+		Date runDate = calendarRef.getTime();
+		System.out.println("计划时间为: " + runDate);
+		
+		MyTask task = new MyTask();
+		Timer timer = new Timer();
+		timer.schedule(task, runDate, 4000);
+	}
+}
+/*
+result:
+当前时间为: Sat Nov 03 14:50:40 CST 2018
+计划时间为: Sat Nov 03 14:50:50 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:50:50 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:50:54 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:50:58 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:51:02 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:51:06 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:51:10 CST 2018
+*/
+每隔4秒运行一次TimerTask任务，并且是无限期重复执行TimerTask任务
+
+
+2) 计划时间早于当前时间--提前运行的效果
+如果计划时间早于当前时间，则立即执行task任务
+
+package chapter05.section1.thread_5_1_2.project_1_timerTest2_period;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test2 {
+	public static void main(String[] args) {
+		System.out.println("当前时间为: " + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.set(Calendar.SECOND, calendarRef.get(Calendar.SECOND) - 10);
+		Date runDate = calendarRef.getTime();
+		System.out.println("计划时间为: " + runDate);
+		
+		MyTask task = new MyTask();
+		Timer timer = new Timer();
+		timer.schedule(task, runDate, 4000);
+	}
+}
+/*
+result:
+当前时间为: Sat Nov 03 14:52:15 CST 2018
+计划时间为: Sat Nov 03 14:52:05 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:52:15 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:52:19 CST 2018
+任务执行了， 时间为: Sat Nov 03 14:52:23 CST 2018
+*/
+可以看到立即执行
+
+
+3) 任务执行时间被延时
+package chapter05.section1.thread_5_1_2.project_2_timerTest2_periodLater;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTask extends TimerTask{
+	@Override
+	public void run() {
+		try {
+			System.out.println("A begin timer = " + new Date());
+			Thread.sleep(5000);
+			System.out.println("A   end timer = " + new Date());
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter05.section1.thread_5_1_2.project_2_timerTest2_periodLater;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test1 {
+	public static void main(String[] args) {
+		System.out.println("当前时间为: " + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.add(Calendar.SECOND, 10);
+		Date runDate = calendarRef.getTime();
+		System.out.println("计划时间为: " + runDate);
+		
+		MyTask task = new MyTask();
+		Timer timer = new Timer();
+		timer.schedule(task, runDate, 3000);
+	}
+}
+/*
+result:
+当前时间为: Sat Nov 03 14:56:34 CST 2018
+计划时间为: Sat Nov 03 14:56:44 CST 2018
+A begin timer = Sat Nov 03 14:56:44 CST 2018
+A   end timer = Sat Nov 03 14:56:49 CST 2018
+A begin timer = Sat Nov 03 14:56:49 CST 2018
+A   end timer = Sat Nov 03 14:56:54 CST 2018
+A begin timer = Sat Nov 03 14:56:54 CST 2018
+A   end timer = Sat Nov 03 14:56:59 CST 2018
+*/
+任务被延时，一个任务执行时间大约5秒，但周期3秒，因此还得一个一个执行。
+
+
+4) TimerTask类的cancel()方法
+TimerTask类的cancel()方法的作用是将自身从任务队列中进行清除，其他任务不受影响
+
+package chapter05.section1.thread_5_1_2.project_3_timerTestCancelMethod;
+
+import java.util.TimerTask;
+import java.util.Date;
+
+public class MyTaskA extends TimerTask{
+	@Override
+	public void run() {
+		System.out.println("A run timer =" + new Date());
+		this.cancel();
+		System.out.println("A任务自己移除自己");
+	}
+}
+
+
+package chapter05.section1.thread_5_1_2.project_3_timerTestCancelMethod;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTaskB extends TimerTask{
+	@Override
+	public void run() {
+		System.out.println("B run timer = " + new Date());
+	}
+}
+
+
+package chapter05.section1.thread_5_1_2.project_3_timerTestCancelMethod;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test {
+	
+	public static void main(String[] args) {
+		System.out.println("当前时间为："+ new Date());
+		Calendar calendarRef1 = Calendar.getInstance();
+		Date runDate1 = calendarRef1.getTime();
+		System.out.println("计划时间为：" + runDate1);
+		MyTaskA task1 = new MyTaskA();
+		MyTaskB task2 = new MyTaskB();
+		Timer timer = new  Timer();
+		timer.schedule(task1, runDate1,4000);
+		timer.schedule(task2, runDate1,4000);
+	}
+}
+/*
+result:
+当前时间为：Sat Nov 03 15:05:28 CST 2018
+计划时间为：Sat Nov 03 15:05:28 CST 2018
+A run timer =Sat Nov 03 15:05:28 CST 2018
+A任务自己移除自己
+B run timer = Sat Nov 03 15:05:28 CST 2018
+B run timer = Sat Nov 03 15:05:32 CST 2018
+B run timer = Sat Nov 03 15:05:36 CST 2018
+B run timer = Sat Nov 03 15:05:40 CST 2018
+*/
+
+
+5) Timer类的cancel()方法
+和TimerTask类中的cancel()方法清除自身不同，Timer类中的cancel()方法作用是将任
+务队列中全部的任务进行清空。 
+
+Terminates this timer, discarding any currently scheduled tasks. Does not 
+interfere with a currently executing task (if it exists). Once a timer has 
+been terminated, its execution thread terminates gracefully, and no more 
+tasks may be scheduled on it.
+可以看到终止的时候正在执行的任务会继续执行，但是其他的都被清空，执行完成之后就优雅的
+终止，不能再安排任务
+
+
+举例:
+package chapter05.section1.thread_5_1_2.project_5_TimerCancelError;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTaskA extends TimerTask{
+	@Override
+	public void run() {
+		System.out.println("A run timer = " + new Date());
+	}
+}
+
+
+package chapter05.section1.thread_5_1_2.project_5_TimerCancelError;
+
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTaskB extends TimerTask{
+	@Override
+	public void run() {
+		System.out.println("B run timer = " + new Date());
+	}
+}
+
+
+package chapter05.section1.thread_5_1_2.project_5_TimerCancelError;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test {
+	
+	public static void main(String[] args) throws InterruptedException{
+		System.out.println("当前时间为：" + new Date());
+		Calendar calendarRef1 = Calendar.getInstance();
+		Date runDate1 = calendarRef1.getTime();
+		System.out.println("计划时间为：" + runDate1);
+		MyTaskA task1 = new MyTaskA();
+		MyTaskB task2 = new MyTaskB();
+		Timer timer = new Timer();
+		timer.schedule(task1, runDate1, 2000);
+		timer.schedule(task2, runDate1, 2000);
+		Thread.sleep(10000);
+		timer.cancel();
+	}	
+}
+/*
+result:
+当前时间为：Sat Nov 03 15:16:35 CST 2018
+计划时间为：Sat Nov 03 15:16:35 CST 2018
+A run timer = Sat Nov 03 15:16:35 CST 2018
+B run timer = Sat Nov 03 15:16:35 CST 2018
+B run timer = Sat Nov 03 15:16:37 CST 2018
+A run timer = Sat Nov 03 15:16:37 CST 2018
+A run timer = Sat Nov 03 15:16:39 CST 2018
+B run timer = Sat Nov 03 15:16:39 CST 2018
+B run timer = Sat Nov 03 15:16:41 CST 2018
+A run timer = Sat Nov 03 15:16:41 CST 2018
+A run timer = Sat Nov 03 15:16:43 CST 2018
+B run timer = Sat Nov 03 15:16:43 CST 2018
+*/
+
+
+6) Timer的cancel()方法注意事项
+Timer类中的cancel()方法有时并不一定会停止计划任务，而是正常执行
+
+package chapter05.section1.thread_5_1_3.project_1_timerTest3;
+
+import java.util.Date;
+import java.util.TimerTask;
+
+public class MyTaskA extends TimerTask{
+	
+	private int i;
+	
+	public MyTaskA(int i) {
+		super();
+		this.i = i;
+	}
+	
+	@Override
+	public void run() {
+		System.out.println("第" + i + "次没有被cancel取消");
+	}
+}
+
+
+package chapter05.section1.thread_5_1_3.project_1_timerTest3;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+
+public class Test {
+	
+	public static void main(String[] args) {
+		int i = 0;
+		Calendar canlendarRef1 = Calendar.getInstance();
+		Date runDate1 = canlendarRef1.getTime();
+		while(true) {
+			i++;
+			Timer timer = new Timer();
+			MyTaskA task1 = new MyTaskA(i);
+			timer.schedule(task1, runDate1);
+			timer.cancel();
+		}
+	}
+}
+/*
+result:
+.................一直在运行
+*/
+结果分析:
+
+我们来看看cancel()的部分代码:
+
+  public void cancel() {
+        synchronized(queue) {
+            thread.newTasksMayBeScheduled = false;
+            queue.clear();
+            queue.notify();  // In case queue was already empty.
+        }
+    }
+
+下面是我们翻译过文档中重要的一句话:
+
+This class is thread-safe: multiple threads can share a single Timer 
+object without the need for external synchronization.
+这个类是线程安全的: 多个线程可以共享一个计时器对象，而不需要外部的同步。
+
+
+可以看到调用了cancel方法，线程的一个字段设置为false,不允许再次加入任务，清空队
+列，然后唤醒其他正在等待这个队列的线程。并且调用cancel方法要获得queue锁，因此由
+于很多个线程争抢锁，cancel()方法得不到执行，则让TimerTask类中的任务正常执行。
+
+
+(3) 方法schedule(TimerTask task, long delay)的测试
+该方法的作用是以执行schedule(Timer task, long delay)方法当前的时间为参考时间，
+在此时间基础上延迟指定毫秒数后执行一次TimerTask任务
+
+举例：
+package chapter05.section1.thread_5_1_3.project_1_timerTest3;
+
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class Run {
+	static public class MyTask extends TimerTask{
+		@Override 
+		public void run() {
+			System.out.println("运行了! 时间为: " + new Date());
+		}
+	}
+	
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		Timer timer = new Timer();
+		System.out.println("当前时间: " + new Date());
+		timer.schedule(task, 7000);
+	}
+}
+/*
+result:
+当前时间: Sat Nov 03 15:49:22 CST 2018
+运行了! 时间为: Sat Nov 03 15:49:29 CST 2018
+*/
+任务Task被延迟了7秒执行
+
+
+(4) 方法schedule(TimerTask task, long delay, long period)的测试
+该方法的作用是以执行schedule(TimerTask task, long delay, long period)方法
+当前的时间为参考时间，在此时间基础上延迟指定的毫秒数，再以某一间隔时间无限次数
+地执行某一任务
+
+package chapter05.section1.thread_5_1_4.project_1_timerTest4;
+
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class Run {
+	static public class MyTask extends TimerTask{
+		@Override 
+		public void run() {
+			System.out.println("运行了! 时间为: " + new Date());
+		}
+	}
+	
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		Timer timer = new Timer();
+		System.out.println("当前时间: " + new Date());
+		timer.schedule(task, 3000, 7000);
+	}
+}
+/*
+result:
+当前时间: Sat Nov 03 15:55:07 CST 2018
+运行了! 时间为: Sat Nov 03 15:55:10 CST 2018
+运行了! 时间为: Sat Nov 03 15:55:17 CST 2018
+运行了! 时间为: Sat Nov 03 15:55:24 CST 2018
+*/
+
+
+(5) 方法scheduleAtFixedRate(TimerTask task, Date firstTime, long period)的测试
+
+方法schedule和方法scheduleAtFixedRate都会按顺序执行，所以不要考虑非线程安全
+的情况方法schedule和方法scheduleAtFixedRate主要的区别只在于有没有追赶特性
+
+
+1) 测试schedule方法任务不延时--Date类型
+
+package chapter05.section1.thread_5_1_5.project_1_timerTest5;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
+
+public class Test1 {
+	
+	static public class MyTask extends TimerTask {
+		@Override
+		public void run() {
+			try {
+				System.out.println("begin timer = "+ System.currentTimeMillis());
+				Thread.sleep(1000);
+				System.out.println("  end timer = "+ System.currentTimeMillis());
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		Calendar calendarRef = Calendar.getInstance();
+		Date runDate1 = calendarRef.getTime();
+		Timer timer = new Timer();
+		timer.schedule(task,runDate1,3000);
+	}
+}
+结果:
+在不延时的情况下，如果执行任务的时间没有被延时，则下一次执行任务的开始时间是上
+一次任务的开始时间加上period时间
+
+
+2) 测试schedule方法任务不延时--long类型
+
+package chapter05.section1.thread_5_1_5.project_1_timerTest5;
+
+import java.util.Timer;
+import java.util.TimerTask;
+
+
+public class Test2 {
+	
+	static public class MyTask extends TimerTask {
+		@Override
+		public void run() {
+			try {
+				System.out.println("begin timer = "+ System.currentTimeMillis());
+				Thread.sleep(1000);
+				System.out.println("  end timer = "+ System.currentTimeMillis());
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		System.out.println("当前时间："+System.currentTimeMillis());
+		Timer timer = new Timer();
+		timer.schedule(task,3000,4000);
+	} 
+}
+/*
+result:
+当前时间：1541233293229
+begin timer = 1541233296231
+  end timer = 1541233297231
+begin timer = 1541233300232
+  end timer = 1541233301233
+begin timer = 1541233304233
+*/
+
+
+3) 测试schedule方法任务延时--Date类型
+
+package chapter05.section1.thread_5_1_5.project_1_timerTest5;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class Test3 {
+	
+	static public class MyTask extends TimerTask {
+		@Override
+		public void run() {
+			try {
+				System.out.println("begin timer = "+ System.currentTimeMillis());
+				Thread.sleep(5000);
+				System.out.println("  end timer = "+ System.currentTimeMillis());
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		Calendar calendarRef = Calendar.getInstance();
+		Date runDate1 = calendarRef.getTime();
+		Timer timer = new Timer();
+		timer.schedule(task,runDate1,2000);
+	} 
+}
+/*
+result:
+begin timer = 1541233456659
+  end timer = 1541233461660
+begin timer = 1541233461660
+  end timer = 1541233466660
+begin timer = 1541233466660
+*/
+在延时情况下，如果执行任务的时间被延时，那么下一次任务的执行时间是以上一次任务
+"结束"时的时间作为参考来计算
+
+
+
+4) 测试schedule方法任务延时--long类型
+package chapter05.section1.thread_5_1_5.project_1_timerTest5;
+
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class Test4 {
+	static public class MyTask extends TimerTask {
+		@Override
+		public void run() {
+			try {
+				System.out.println("begin timer = "+ System.currentTimeMillis());
+				Thread.sleep(5000);
+				System.out.println("  end timer = "+ System.currentTimeMillis());
+			} catch (InterruptedException e) {
+				e.printStackTrace();
+			}
+		}
+	}
+	
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		System.out.println("当前时间："+System.currentTimeMillis());
+		Timer timer = new Timer();
+		timer.schedule(task,3000,2000);
+	} 
+}
+/*
+ result:
+当前时间：1541233636669
+begin timer = 1541233639671
+  end timer = 1541233644671
+begin timer = 1541233644671
+  end timer = 1541233649672
+begin timer = 1541233649672
+ */
+ 可以看到还与上次一样
+
+
+6) 测试scheduleAtFixedRate方法任务不延时--long类型/Date类型
+与schedule的不延时没什么区别
+
+7) 测试scheduleAtFixedRate方法任务延时--long类型/Date类型
+见源码，目前为止schedule和scheduleAtFixedRate还没有什么区别
+
+
+schedule和scheduleAtFixedRate之间的区别就在于追赶性
+
+
+8) 验证schedule方法不具有追赶执行性
+
+package chapter05.section1.thread_5_1_5.project_1_timerTest5;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class Test9 {
+
+	static public class MyTask extends TimerTask {
+		@Override
+		public void run() {
+			System.out.println("begin timer = " + new Date());
+			System.out.println("  end timer = " + new Date());
+		}
+	}
+
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		System.out.println("现在执行时间：" + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.set(Calendar.SECOND, calendarRef.get(Calendar.SECOND) - 20);
+		Date runDate = calendarRef.getTime();
+		System.out.println("计划执行时间：" + runDate);
+		Timer timer = new Timer();
+		timer.schedule(task, runDate, 2000);
+	}
+}
+/*
+result:
+现在执行时间：Sat Nov 03 16:35:34 CST 2018
+计划执行时间：Sat Nov 03 16:35:14 CST 2018
+begin timer = Sat Nov 03 16:35:34 CST 2018
+  end timer = Sat Nov 03 16:35:34 CST 2018
+begin timer = Sat Nov 03 16:35:36 CST 2018
+  end timer = Sat Nov 03 16:35:36 CST 2018
+begin timer = Sat Nov 03 16:35:38 CST 2018
+  end timer = Sat Nov 03 16:35:38 CST 2018
+begin timer = Sat Nov 03 16:35:40 CST 2018
+*/
+可以看到早于34秒的任务被取消，不被执行了，这就是Task任务的不追赶
+
+
+10) 验证scheduleAtFixedRate方法具有追赶执行性
+
+package chapter05.section1.thread_5_1_5.project_1_timerTest5;
+
+import java.util.Calendar;
+import java.util.Date;
+import java.util.Timer;
+import java.util.TimerTask;
+
+public class Test10 {
+	
+	static public class MyTask extends TimerTask {
+		@Override
+		public void run() {
+			System.out.println("begin timer = " + new Date());
+			System.out.println("  end timer = " + new Date());
+		}
+	}
+
+	public static void main(String[] args) {
+		MyTask task = new MyTask();
+		System.out.println("现在执行时间：" + new Date());
+		Calendar calendarRef = Calendar.getInstance();
+		calendarRef.set(Calendar.SECOND, calendarRef.get(Calendar.SECOND) - 20);
+		Date runDate = calendarRef.getTime();
+		System.out.println("计划执行时间：" + runDate);
+		Timer timer = new Timer();
+		timer.scheduleAtFixedRate(task, runDate, 2000);
+	}
+}
+/*
+result:
+现在执行时间：Sat Nov 03 16:38:45 CST 2018
+计划执行时间：Sat Nov 03 16:38:25 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:45 CST 2018
+  end timer = Sat Nov 03 16:38:45 CST 2018
+begin timer = Sat Nov 03 16:38:47 CST 2018
+  end timer = Sat Nov 03 16:38:47 CST 2018
+begin timer = Sat Nov 03 16:38:49 CST 2018
+  end timer = Sat Nov 03 16:38:49 CST 2018
+begin timer = Sat Nov 03 16:38:51 CST 2018
+*/
+可以看到将两个时间段内的时间多对应的Task任务被"补充性"地执行，这就是Task任务
+追赶特性。
+但是我们看到补充的数量不对。
+
+
+总结: 这些代码可以应用在Android技术中，实现类似于轮询、动画等常见的主要功能。
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
