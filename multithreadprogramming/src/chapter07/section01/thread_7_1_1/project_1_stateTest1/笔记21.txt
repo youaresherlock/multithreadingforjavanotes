@@ -1,0 +1,1705 @@
+第七章
+本章内容:
+1. 线程组的使用
+2. 如何切换线程的状态
+3. SimpleDataFormat类与多线程的解决方案
+4. 如何处理线程的异常
+
+
+线程的状态
+线程对象在不同的运行时期有不同的状态，状态信息就存在于State枚举类中。
+
+我们看看Thread的类中的枚举类State代码:
+   /**
+     * A thread state.  A thread can be in one of the following states:
+     * <ul>
+     * <li>{@link #NEW}<br>
+     *     A thread that has not yet started is in this state.
+     *     </li>
+     * <li>{@link #RUNNABLE}<br>
+     *     A thread executing in the Java virtual machine is in this state.
+     *     </li>
+     * <li>{@link #BLOCKED}<br>
+     *     A thread that is blocked waiting for a monitor lock
+     *     is in this state.
+     *     </li>
+     * <li>{@link #WAITING}<br>
+     *     A thread that is waiting indefinitely for another thread to
+     *     perform a particular action is in this state.
+     *     </li>
+     * <li>{@link #TIMED_WAITING}<br>
+     *     A thread that is waiting for another thread to perform an action
+     *     for up to a specified waiting time is in this state.
+     *     </li>
+     * <li>{@link #TERMINATED}<br>
+     *     A thread that has exited is in this state.
+     *     </li>
+     * </ul>
+     *
+     * <p>
+     * A thread can be in only one state at a given point in time.
+     * These states are virtual machine states which do not reflect
+     * any operating system thread states.
+     *
+     * @since   1.5
+     * @see #getState
+     */
+    public enum State {
+        /**
+         * Thread state for a thread which has not yet started.
+         */
+        NEW,
+
+        /**
+         * Thread state for a runnable thread.  A thread in the runnable
+         * state is executing in the Java virtual machine but it may
+         * be waiting for other resources from the operating system
+         * such as processor.
+         */
+        RUNNABLE,
+
+        /**
+         * Thread state for a thread blocked waiting for a monitor lock.
+         * A thread in the blocked state is waiting for a monitor lock
+         * to enter a synchronized block/method or
+         * reenter a synchronized block/method after calling
+         * {@link Object#wait() Object.wait}.
+         */
+        BLOCKED,
+
+        /**
+         * Thread state for a waiting thread.
+         * A thread is in the waiting state due to calling one of the
+         * following methods:
+         * <ul>
+         *   <li>{@link Object#wait() Object.wait} with no timeout</li>
+         *   <li>{@link #join() Thread.join} with no timeout</li>
+         *   <li>{@link LockSupport#park() LockSupport.park}</li>
+         * </ul>
+         *
+         * <p>A thread in the waiting state is waiting for another thread to
+         * perform a particular action.
+         *
+         * For example, a thread that has called <tt>Object.wait()</tt>
+         * on an object is waiting for another thread to call
+         * <tt>Object.notify()</tt> or <tt>Object.notifyAll()</tt> on
+         * that object. A thread that has called <tt>Thread.join()</tt>
+         * is waiting for a specified thread to terminate.
+         */
+        WAITING,
+
+        /**
+         * Thread state for a waiting thread with a specified waiting time.
+         * A thread is in the timed waiting state due to calling one of
+         * the following methods with a specified positive waiting time:
+         * <ul>
+         *   <li>{@link #sleep Thread.sleep}</li>
+         *   <li>{@link Object#wait(long) Object.wait} with timeout</li>
+         *   <li>{@link #join(long) Thread.join} with timeout</li>
+         *   <li>{@link LockSupport#parkNanos LockSupport.parkNanos}</li>
+         *   <li>{@link LockSupport#parkUntil LockSupport.parkUntil}</li>
+         * </ul>
+         */
+        TIMED_WAITING,
+
+        /**
+         * Thread state for a terminated thread.
+         * The thread has completed execution.
+         */
+        TERMINATED;
+    }
+
+
+
+线程可以处于以上6种状态:
+(1) NEW 
+	至今尚未启动的线程处于这种状态
+(2) RUNNABLE
+	正在Java虚拟机中执行的线程处于这种状态，这种状态下可以细分为Ready和
+Running状态，这里有线程调度器的算法来决定
+(3) BLOCKED
+	受阻塞并等待某个监视器的线程处于这种状态
+(4) WAITING
+	无限期地等待另一个线程来执行某一特定操作的线程处于这种状态
+(5) TIME WAITING
+	等待另一线程来执行取决于指定等待时间的操作的线程处于这种状态
+(6) TERMINATED
+	已退出的线程处于这种状态
+
+
+下面是调用了对应方法后线程的生命周期的转变示意图：
+如图
+
+从图可以得知，在调用与线程有关的方法后，会进入不同的线程状态，这些状态之间某些是
+可双向切换的，比如WAITING和RUNNING状态之间可以循环地进行切换;而有些是单项切换的
+，比如线程销毁后并不能自动进入RUNNING状态
+
+
+1. 线程的六种状态
+(1).验证NEW、RUNNABLE和TERMINATED
+了解线程的状态有助于程序员监控线程对象所处的情况，比如哪些线程从未启动，哪些线程
+正在执行，哪些线程正在阻塞，哪些线程正在等待，哪些线程已经销毁了。这些是与线程生命
+周期相关的信息。
+
+NEW状态是线程实例化后还未执行start()方法时的状态，而RUNNABLE状态是线程进入运行的
+状态，TERMINATED是线程被销毁时的状态。
+
+package chapter07.section01.thread_7_1_1.project_1_stateTest1;
+
+public class MyThread extends Thread {
+	
+	public MyThread() {
+		System.out.println("构造方法中的状态: " + Thread.currentThread().getState());
+	}
+	
+	@Override
+	public void run() {
+		System.out.println("run方法中的状态: " + Thread.currentThread().getState());
+	}
+}
+
+
+package chapter07.section01.thread_7_1_1.project_1_stateTest1;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread t = new MyThread();
+			System.out.println("main方法中的状态1: " + t.getState());
+			Thread.sleep(1000);
+			t.start();
+			Thread.sleep(1000);
+			System.out.println("main方法中的状态2: " + t.getState());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+构造方法中的状态: RUNNABLE 这个是main线程的状态
+main方法中的状态1: NEW
+run方法中的状态: RUNNABLE
+main方法中的状态2: TERMINATED
+*/
+
+
+(2) 验证TIMED_WAITING
+线程状态TIMED_WAITING代表线程执行了Thread.sleep()方法，呈等待状态，等待时间到
+达，继续向下运行
+
+package chapter07.section01.thread_7_1_2.project_1_stateTest2;
+
+public class MyThread extends Thread {
+	
+	@Override
+	public void run() {
+		try {
+			System.out.println("begin sleep");
+			Thread.sleep(10000);
+			System.out.println("  end sleep");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section01.thread_7_1_2.project_1_stateTest2;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread t = new MyThread();
+			t.start();
+			Thread.sleep(1000);
+			System.out.println("main方法中的状态: " + t.getState());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+begin sleep
+main方法中的状态: TIMED_WAITING
+  end sleep
+*/
+
+
+(3) 验证BLOCKED
+BLOCKED状态出现在某一个线程在等待锁的时候
+
+package chapter07.section01.thread_7_1_3.project_1_stateTest3;
+
+public class MyService {
+	synchronized static public void serviceMethod() {
+		try {
+			System.out.println(Thread.currentThread().getName() + "进入了业务方法!");
+			Thread.sleep(1000);
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section01.thread_7_1_3.project_1_stateTest3;
+
+public class MyThread1 extends Thread{
+	@Override
+	public void run() {
+		MyService.serviceMethod();
+	}
+}
+
+
+package chapter07.section01.thread_7_1_3.project_1_stateTest3;
+
+public class MyThread2 extends Thread {
+	
+	@Override
+	public void run() {
+		MyService.serviceMethod();
+	}
+}
+
+
+package chapter07.section01.thread_7_1_3.project_1_stateTest3;
+
+public class Run {
+	public static void main(String[] args) throws InterruptedException{
+		MyThread1 t1 = new MyThread1();
+		t1.setName("a");
+		t1.start();
+		MyThread2 t2 = new MyThread2();
+		t2.setName("b");
+		t2.start();
+		Thread.sleep(1000);
+		System.out.println("main方法中的t2状态: " + t2.getState());
+	}
+}
+/*
+result:
+a进入了业务方法!
+main方法中的t2状态: BLOCKED
+b进入了业务方法!
+*/
+t2线程一直在等待t1释放锁，所以t2当时的状态就是BLOCKED
+
+
+(4) 验证WAITING
+状态WAITING是线程执行了Object.wait()方法后所处的状态
+
+package chapter07.section01.thread_7_1_4.project_1_stateTest4;
+
+public class Lock {
+	@SuppressWarnings("deprecation")
+	public static final Byte lock = new Byte("0");
+}
+
+
+package chapter07.section01.thread_7_1_4.project_1_stateTest4;
+
+public class MyThread extends Thread {
+	
+	@Override
+	public void run() {
+		try {
+			synchronized(Lock.lock) {
+				Lock.lock.wait();
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section01.thread_7_1_4.project_1_stateTest4;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			MyThread t = new MyThread();
+			t.start();
+			Thread.sleep(1000);
+			System.out.println("main方法中的状态: " + t.getState());
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+main方法中的状态: WAITING
+*/
+
+
+2.线程组
+	可以把线程归属到某一个线程组中，线程组中可以有线程对象，也可以有线程组，组
+中也还可以有线程，。这样的组织结构有些类似于树的形式。
+
+如图
+
+线程组的作用是，可以批量的管理线程或线程组对象，有效地对线程或线程组对象进行组织。
+
+
+(1) ThreadGroup源码分析
+我们简单来看一下ThreadGroup类部分代码:
+
+public
+class ThreadGroup implements Thread.UncaughtExceptionHandler {
+    private final ThreadGroup parent; 它的parent，是个私有常量
+    String name; //当前线程组的名字
+    int maxPriority; //组中线程的最大优先级
+    boolean destroyed; //是否存活
+    boolean daemon; //是否守护
+    boolean vmAllowSuspension; 
+
+    int nUnstartedThreads = 0;
+    int nthreads;
+    Thread threads[]; //记录线程组中的线程
+
+    int ngroups;
+    ThreadGroup groups[]; //记录线程组中的线程组
+
+    /**
+     * Creates an empty Thread group that is not in any Thread group.
+     * This method is used to create the system Thread group.
+     */
+     //可以看到这个方法是c代码来调用，是私有构造器
+    private ThreadGroup() {     // called from C code 
+        this.name = "system"; //可以看到根组是system系统线程组
+        this.maxPriority = Thread.MAX_PRIORITY; //优先级是最大的10
+        this.parent = null; //没有父结点
+    }
+
+    /**
+     * Constructs a new thread group. The parent of this new group is
+     * the thread group of the currently running thread.
+     * <p>
+     * The <code>checkAccess</code> method of the parent thread group is
+     * called with no arguments; this may result in a security exception.
+     *
+     * @param   name   the name of the new thread group.
+     * @exception  SecurityException  if the current thread cannot create a
+     *               thread in the specified thread group.
+     * @see     java.lang.ThreadGroup#checkAccess()
+     * @since   JDK1.0
+     */
+     //我们就是通过这个有参构造器创建线程组的，调用这个方法的当前线程的所属线程组也是
+     //创建的线程组的父线程组
+    public ThreadGroup(String name) {
+        this(Thread.currentThread().getThreadGroup(), name);
+    }
+
+    /**
+     * Creates a new thread group. The parent of this new group is the
+     * specified thread group.
+     * <p>
+     * The <code>checkAccess</code> method of the parent thread group is
+     * called with no arguments; this may result in a security exception.
+     *
+     * @param     parent   the parent thread group.
+     * @param     name     the name of the new thread group.
+     * @exception  NullPointerException  if the thread group argument is
+     *               <code>null</code>.
+     * @exception  SecurityException  if the current thread cannot create a
+     *               thread in the specified thread group.
+     * @see     java.lang.SecurityException
+     * @see     java.lang.ThreadGroup#checkAccess()
+     * @since   JDK1.0
+     */
+     //可以指定所属线程组
+    public ThreadGroup(ThreadGroup parent, String name) {
+        this(checkParentAccess(parent), parent, name);
+    }
+
+    private ThreadGroup(Void unused, ThreadGroup parent, String name) {
+        this.name = name;
+        this.maxPriority = parent.maxPriority;
+        this.daemon = parent.daemon;
+        this.vmAllowSuspension = parent.vmAllowSuspension;
+        this.parent = parent;
+        parent.add(this);
+    }
+
+
+
+(2) 线程对象关联线程组: 1级关联
+1级关联就是父对象中有子对象，但并不创建子孙对象。
+
+举例:
+package chapter07.section02.thread_7_2_1.project_1_groupAddThread;
+
+
+public class ThreadA  extends Thread {
+
+	@Override
+	public void run() {
+		try {
+			while (!Thread.currentThread().isInterrupted()) {
+				System.out.println("ThreadName=" + 
+								Thread.currentThread().getName());
+				Thread.sleep(3000);
+			}
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section02.thread_7_2_1.project_1_groupAddThread;
+
+public class ThreadB extends Thread {
+
+	@Override
+	public void run() {
+		try {
+			while (!Thread.currentThread().isInterrupted()) {
+				System.out.println("ThreadName=" + 
+								Thread.currentThread().getName());
+				Thread.sleep(3000);
+			}
+		} catch (InterruptedException e) {
+			// TODO Auto-generated catch block
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section02.thread_7_2_1.project_1_groupAddThread;
+
+public class Run {
+	public static void main(String[] args) {
+		ThreadA aRunnable = new ThreadA();
+		ThreadB bRunnable = new ThreadB();
+
+		ThreadGroup group = new ThreadGroup("Clarence");
+
+		Thread aThread = new Thread(group, aRunnable);
+		Thread bThread = new Thread(group, bRunnable);
+		aThread.start();
+		bThread.start();
+
+		System.out.println("活动的线程数为：" + group.activeCount());
+		System.out.println("线程组的名称为：" + group.getName());
+	}
+}
+/*
+result:
+活动的线程数为：2
+线程组的名称为：Clarence
+ThreadName=Thread-3
+ThreadName=Thread-2
+...................
+ */
+
+
+(3) 线程对象关联线程组: 多级关联
+
+此种写法在开发中不太常见。如果线程树结构设计得非常复杂反而不利于线程对象的管理
+，但JDK却提供了支持多级关联的线程树结构。
+
+package chapter07.section02.thread_7_2_2.project_1_groupAddThreadMoreLevel;
+
+public class Run {
+	public static void main(String[] args) {
+		// 在main组中添加一个线程组A，然后在这个A组中添加线程对象Z
+		// 方法activeGroupCount()和activeCount()的值不是固定的
+		// 是系统中环境的一个快照
+		ThreadGroup mainGroup = Thread.currentThread().getThreadGroup();
+		ThreadGroup group = new ThreadGroup(mainGroup, "A");
+		Runnable runnable = new Runnable() {
+			@Override
+			public void run() {
+				try {
+					System.out.println("runMethod!");
+					Thread.sleep(1000); //线程必须在运行状态才可以受组管理
+				} catch (InterruptedException e) {
+					// TODO: handle exception
+					e.printStackTrace();
+				}
+			}
+		};
+		
+		Thread newThread = new Thread(group, runnable);
+		newThread.setName("z");
+		newThread.start(); // 线程必须启动然后才归到组A中
+		
+		ThreadGroup listGroup[] = new ThreadGroup[Thread.currentThread()
+		                                          .getThreadGroup().activeGroupCount()];
+		//java.lang.ThreadGroup.enumerate(ThreadGroup[] list):
+		//复制到该线程组中指定的数组引用的所有活动子组
+		Thread.currentThread().getThreadGroup().enumerate(listGroup);
+		System.out.println("main线程中有多少个子线程组: " + listGroup.length + " 名字为: "
+				+ listGroup[0].getName()); //这里只有一个组
+		Thread listThread[] = new Thread[listGroup[0].activeCount()];
+		listGroup[0].enumerate(listThread);
+		System.out.println(listThread[0].getName());
+	}
+}
+/*
+result:
+main线程中有多少个子线程组: 1 名字为: A
+runMethod!
+z
+ */
+本实验在main组创建了一个新组，在新组中添加了线程
+
+
+
+(4) 线程自动归属特性
+自动归属就是自动归到当前线程组中
+
+
+package chapter07.section02.thread_7_2_3.project_1_autoAddGroup;
+
+public class Run {
+	public static void main(String[] args) {
+		System.out.println("A处线程："+Thread.currentThread().getName()
+				+ " 所属的线程组名为："
+				+ Thread.currentThread().getThreadGroup().getName()+ " "
+				+ " 中有线程组数量："+Thread.currentThread().getThreadGroup().activeGroupCount());
+		ThreadGroup group=new ThreadGroup("新的组"); //自动归属到当前线程的所属组，即main组
+		System.out.println("B处线程："+Thread.currentThread().getName()
+				+ " 所属的线程组名为："
+				+ Thread.currentThread().getThreadGroup().getName()+ " "
+				+" 中有线程组数量："+Thread.currentThread().getThreadGroup().activeGroupCount());
+		ThreadGroup[] threadGroup=new ThreadGroup[Thread.currentThread().getThreadGroup().activeGroupCount()];
+		Thread.currentThread().getThreadGroup().enumerate(threadGroup);
+		for (int i = 0; i < threadGroup.length; i++) {
+			System.out.println("第一个线程组名称为："+threadGroup[i].getName());
+		}
+	}
+}
+/*
+result:
+A处线程：main 所属的线程组名为：main  中有线程组数量：0
+B处线程：main 所属的线程组名为：main  中有线程组数量：1
+第一个线程组名称为：新的组
+ */
+
+
+(5)  获取根线程组
+
+package chapter07.section02.thread_7_2_4.project_1_getGroupParent;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		System.out.println("线程：" + Thread.currentThread().getName()
+				+ " 所在的线程组名为："
+				+ Thread.currentThread().getThreadGroup().getName());
+		System.out
+				.println("main线程所在的线程组的父线程组的名称是："
+						+ Thread.currentThread().getThreadGroup().getParent()
+								.getName());
+		System.out.println("main线程所在的线程组的父线程组的父线程组的名称是："
+				+ Thread.currentThread().getThreadGroup().getParent()
+						.getParent().getName());
+	}
+}
+/*
+result:
+线程：main 所在的线程组名为：main
+main线程所在的线程组的父线程组的名称是：system
+Exception in thread "main" java.lang.NullPointerException
+	at chapter07.section02.thread_7_2_4.project_1_getGroupParent.Run.main(Run.java:15)
+*/
+
+
+(6) 线程组里加线程组
+
+package chapter07.section02.thread_7_2_5.project_1_mainGroup;
+
+public class Run {
+	
+	public static void main(String[] args) {
+		System.out.println("线程组名称: " 
+				+ Thread.currentThread().getThreadGroup().getName());
+		System.out.println("线程组中活动的线程数量: " 
+				+ Thread.currentThread().getThreadGroup().activeCount());
+		ThreadGroup newGroup = new ThreadGroup(Thread.currentThread()
+				.getThreadGroup(), "newGroup");
+		System.out.println("线程组中线程组的数量-加之后: " 
+				+ Thread.currentThread().getThreadGroup().activeGroupCount()); //main线程组中的一个线程组
+		System.out.println("父线程组名称: " 
+				+ Thread.currentThread().getThreadGroup().getParent().getName());
+	}
+}
+/*
+result:
+线程组名称: main
+线程组中活动的线程数量: 1
+线程组中线程组的数量-加之后: 1
+父线程组名称: system
+*/
+
+
+(7) 组内的线程批量停止
+
+package chapter07.section02.thread_7_2_6.project_1_groupInnerStop;
+
+public class MyThread extends Thread{
+	
+	public MyThread(ThreadGroup group, String name) {
+		super(group, name);
+	}
+	
+	@Override
+	public void run() {
+		System.out.println("ThreadName=" + Thread.currentThread().getName()
+				+ "准备开始死循环了 :)");
+		while(!this.isInterrupted()) {
+			
+		}
+		System.out.println("ThreadName=" + Thread.currentThread().getName()
+				+ "结束了 :)");
+	}
+	
+}
+
+
+package chapter07.section02.thread_7_2_6.project_1_groupInnerStop;
+
+public class Run {
+	public static void main(String[] args) {
+		try {
+			ThreadGroup group = new ThreadGroup("Clarence");
+			
+			for(int i = 0; i < 5; i++) {
+				MyThread thread = new MyThread(group, "线程" + (i + 1));
+				thread.start();
+			}
+			Thread.sleep(5000);
+			group.interrupt();
+			System.out.println("调用了interrupt()方法");
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			System.out.println("停了停了!");
+			e.printStackTrace();
+		}
+	}
+}
+
+/*
+result:
+ThreadName=线程1准备开始死循环了 :)
+ThreadName=线程5准备开始死循环了 :)
+ThreadName=线程4准备开始死循环了 :)
+ThreadName=线程3准备开始死循环了 :)
+ThreadName=线程2准备开始死循环了 :)
+调用了interrupt()方法
+ThreadName=线程5结束了 :)
+ThreadName=线程1结束了 :)
+ThreadName=线程3结束了 :)
+ThreadName=线程4结束了 :)
+ThreadName=线程2结束了 :)
+*/
+结果分析:
+通过将线程归属到线程组中，当调用线程组ThreadGroup的interrupt()方法时，可以
+将该组中的所有正在运行的线程批量停止
+
+
+(8) 递归与非递归取得组内对象
+
+package chapter07.section02.thread_7_2_7.project_1_groupRecurseTest;
+
+public class Run {
+	public static void main(String[] args) {
+		ThreadGroup mainGroup = Thread.currentThread().getThreadGroup();
+		ThreadGroup groupA = new ThreadGroup(mainGroup, "A");
+		Runnable runnable = new Runnable() {
+			@Override 
+			public void run() {
+				try {
+					System.out.println("runMethod!");
+					Thread.sleep(10000);
+				} catch (InterruptedException e) {
+					// TODO: handle exception
+					e.printStackTrace();
+				}
+			}
+		};
+		ThreadGroup groupB = new ThreadGroup(groupA, "B");
+		//分配空间，但不一定全部用完
+		ThreadGroup listGroup1[] = new ThreadGroup[Thread.currentThread().
+		                                             getThreadGroup().activeGroupCount()];
+		//传入true是递归取得子组和子孙组 默认情况下是传入true
+		Thread.currentThread().getThreadGroup().enumerate(listGroup1, true);
+		for(int i = 0; i < listGroup1.length; i++) {
+			if(listGroup1[i] != null) {
+				System.out.println(listGroup1[i].getName());
+			}
+		}
+		ThreadGroup listGroup2[] = new ThreadGroup[Thread.currentThread()
+		                                             .getThreadGroup().activeGroupCount()];
+		Thread.currentThread().getThreadGroup().enumerate(listGroup2, false);
+		for(int i = 0; i < listGroup2.length; i++) {
+			if(listGroup2[i] != null) {
+				System.out.println(listGroup2[i].getName());
+			}
+		}
+	}
+}
+
+/*
+result:
+A
+B
+A
+*/
+
+
+3.使线程具有有序性
+正常的情况下，线程在运行时多个线程之间执行任务的时机是无序的。可以通过改造代码
+的方式使它们运行具有有序性。
+
+package chapter07.section03.project_1_threadRunSyn;
+
+public class MyThread extends Thread {
+
+	private Object lock;
+	private String showChar;
+	private int showNumPosition;
+
+	private int printCount = 0;// 统计打印了几个字母
+
+	volatile private static int addNumber = 1;
+
+	public MyThread(Object lock, String showChar, int showNumPosition) {
+		super();
+		this.lock = lock;
+		this.showChar = showChar;
+		this.showNumPosition = showNumPosition;
+	}
+
+	@Override
+	public void run() {
+		try {
+			synchronized (lock) {
+				while (true) {
+					if (addNumber % 3 == showNumPosition) {
+						System.out.println("ThreadName="
+								+ Thread.currentThread().getName()
+								+ " runCount=" + addNumber + " " + showChar);
+						lock.notifyAll();
+						addNumber++;
+						printCount++;
+						if (printCount == 3) {
+							break;
+						}
+					} else {
+						lock.wait();
+					}
+				}
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section03.project_1_threadRunSyn;
+
+public class Run {
+	public static void main(String[] args) {
+
+		Object lock = new Object();
+
+		MyThread a = new MyThread(lock, "A", 1);
+		MyThread b = new MyThread(lock, "B", 2);
+		MyThread c = new MyThread(lock, "C", 0);
+
+		a.start();
+		b.start();
+		c.start();
+	}
+}
+/*
+result:
+ThreadName=Thread-0 runCount=1 A
+ThreadName=Thread-1 runCount=2 B
+ThreadName=Thread-2 runCount=3 C
+ThreadName=Thread-0 runCount=4 A
+ThreadName=Thread-1 runCount=5 B
+ThreadName=Thread-2 runCount=6 C
+ThreadName=Thread-0 runCount=7 A
+ThreadName=Thread-1 runCount=8 B
+ThreadName=Thread-2 runCount=9 C
+*/
+
+
+4. SimpleDateFormat非线程安全
+类SimpleDateFormat主要负责日期的转换与格式化，但在多线程的环境中，使用此类
+容易造成数据转换及处理的不准确，因为SimpleDateFormat类并不是线程安全的
+
+查看DateFormat的format(Date date)源码，我们可发现实现如下：
+
+/**
+ * 格式化日期
+ */
+public final String format(Date date) {
+    return format(date, new StringBuffer(),
+                  DontCareFieldPosition.INSTANCE).toString();
+}
+
+/**
+ *  真正的格式化由此类来实现
+ */
+public abstract StringBuffer format(Date date, StringBuffer toAppendTo,
+                                        FieldPosition fieldPosition);
+
+继续查看SimpleDateFormat，可查看到方法相关定义如下：
+public StringBuffer format(Date date, StringBuffer toAppendTo,
+                           FieldPosition pos) {
+    //  其实看到这里已经明白了，如此轻易地使用内部变量，能线程安全
+    //  线程都对pos进行写操作，必然会影响其他线程的读操作
+    pos.beginIndex = pos.endIndex = 0;
+    return format(date, toAppendTo, pos.getFieldDelegate());
+}
+
+
+(1) 出现异常
+
+package chapter07.section04;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class MyThread extends Thread {
+
+	private SimpleDateFormat sdf;
+	private String dateString;
+
+	public MyThread(SimpleDateFormat sdf, String dateString) {
+		super();
+		this.sdf = sdf;
+		this.dateString = dateString;
+	}
+
+	@Override
+	public void run() {
+		try {
+			Date dateRef = sdf.parse(dateString);
+			String newDateString = sdf.format(dateRef).toString();
+			if (!newDateString.equals(dateString)) {
+				System.out.println("ThreadName=" + this.getName()
+						+ "报错了 日期字符串：" + dateString + " 转换成的日期为："
+						+ newDateString);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section04;
+
+import java.text.SimpleDateFormat;
+
+public class Test {
+	public static void main(String[] args) {
+
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+		String[] dateStringArray = new String[] { "2000-01-01", "2000-01-02",
+				"2000-01-03", "2000-01-04", "2000-01-05", "2000-01-06",
+				"2000-01-07", "2000-01-08", "2000-01-09", "2000-01-10" };
+
+		MyThread[] threadArray = new MyThread[10];
+		for (int i = 0; i < 10; i++) {
+			threadArray[i] = new MyThread(sdf, dateStringArray[i]);
+		}
+		for (int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+	}
+}
+/*出现异常*/
+
+
+(2) 解决异常方法1
+package chapter07.section05.project_1_threadCreateException;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class DateTools {
+	public static Date parse(String formatPattern, String dateString) 
+						throws ParseException{
+		return new SimpleDateFormat(formatPattern).parse(dateString);
+	}
+	
+	public static String format(String formatPattern, Date date) {
+		return new SimpleDateFormat(formatPattern).format(date).toString();
+	}
+}
+
+
+package chapter07.section05.project_1_threadCreateException;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class MyThread extends Thread {
+
+	private SimpleDateFormat sdf;
+	private String dateString;
+
+	public MyThread(SimpleDateFormat sdf, String dateString) {
+		super();
+		this.sdf = sdf;
+		this.dateString = dateString;
+	}
+
+	@Override
+	public void run() {
+		try {
+			Date dateRef = DateTools.parse("yyyy-MM-dd",  dateString);
+			String newDateString = DateTools.format("yyyy-MM-dd", dateRef);
+			if (!newDateString.equals(dateString)) {
+				System.out.println("ThreadName=" + this.getName()
+						+ "报错了 日期字符串：" + dateString + " 转换成的日期为："
+						+ newDateString);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section05.project_1_threadCreateException;
+
+import java.text.SimpleDateFormat;
+
+public class Test {
+	public static void main(String[] args) {
+
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+		String[] dateStringArray = new String[] { "2000-01-01", "2000-01-02",
+				"2000-01-03", "2000-01-04", "2000-01-05", "2000-01-06",
+				"2000-01-07", "2000-01-08", "2000-01-09", "2000-01-10" };
+
+		MyThread[] threadArray = new MyThread[10];
+		for (int i = 0; i < 10; i++) {
+			threadArray[i] = new MyThread(sdf, dateStringArray[i]);
+		}
+		for (int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+	}
+}
+结果正确
+
+
+(2) 解决异常方法2
+ThreadLocal类能使线程绑定到指定的对象。使用该类也可以解决多线程环境下
+SimpleDateFormat类处理错误的情况
+
+package chapter07.section04.thread_7_4_3.project_1_formatOK2;
+
+import java.text.SimpleDateFormat;
+
+public class DateTools {
+	private static ThreadLocal<SimpleDateFormat> tl = new ThreadLocal<SimpleDateFormat>();
+
+	public static SimpleDateFormat getSimpleDateFormat(String datePattern) {
+		SimpleDateFormat sdf = null;
+		sdf = tl.get();
+		if (sdf == null) {
+			sdf = new SimpleDateFormat(datePattern);
+			tl.set(sdf);
+		}
+		return sdf;
+	}
+}
+
+
+package chapter07.section04.thread_7_4_3.project_1_formatOK2;
+
+import java.text.ParseException;
+import java.text.SimpleDateFormat;
+import java.util.Date;
+
+public class MyThread extends Thread {
+
+	private SimpleDateFormat sdf;
+	private String dateString;
+
+	public MyThread(SimpleDateFormat sdf, String dateString) {
+		super();
+		this.sdf = sdf;
+		this.dateString = dateString;
+	}
+
+	@Override
+	public void run() {
+		try {
+			Date dateRef = DateTools.getSimpleDateFormat("yyyy-MM-dd").parse(
+					dateString);
+			String newDateString = DateTools.getSimpleDateFormat("yyyy-MM-dd")
+					.format(dateRef).toString();
+			if (!newDateString.equals(dateString)) {
+				System.out.println("ThreadName=" + this.getName()
+						+ "报错了 日期字符串：" + dateString + " 转换成的日期为："
+						+ newDateString);
+			}
+		} catch (ParseException e) {
+			e.printStackTrace();
+		}
+	}
+}
+
+
+package chapter07.section04.thread_7_4_3.project_1_formatOK2;
+
+import java.text.SimpleDateFormat;
+
+public class Test {
+	public static void main(String[] args) {
+
+		SimpleDateFormat sdf = new SimpleDateFormat("yyyy-MM-dd");
+
+		String[] dateStringArray = new String[] { "2000-01-01", "2000-01-02",
+				"2000-01-03", "2000-01-04", "2000-01-05", "2000-01-06",
+				"2000-01-07", "2000-01-08", "2000-01-09", "2000-01-10" };
+
+		MyThread[] threadArray = new MyThread[10];
+		for (int i = 0; i < 10; i++) {
+			threadArray[i] = new MyThread(sdf, dateStringArray[i]);
+		}
+		for (int i = 0; i < 10; i++) {
+			threadArray[i].start();
+		}
+	}
+}
+
+
+
+5.线程中出现异常的处理
+
+package chapter07.section05.project_1_threadCreateException;
+
+public class MyThread extends Thread{
+	@Override
+	public void run() {
+		String username = null;
+		System.out.println(username.hashCode());
+	}
+}
+
+
+package chapter07.section05.project_1_threadCreateException;
+
+public class Main1 {
+	public static void main(String[] args) {
+		MyThread t = new MyThread();
+		t.start();
+	}
+}
+/*
+Exception in thread "Thread-0" java.lang.NullPointerException
+	at chapter07.section05.project_1_threadCreateException.MyThread.run(MyThread.java:7)
+*/
+
+
+package chapter07.section05.project_1_threadCreateException;
+
+import java.lang.Thread.UncaughtExceptionHandler;
+
+public class Main2 {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		t1.setName("线程t1");
+		t1.setUncaughtExceptionHandler(new UncaughtExceptionHandler() {
+			@Override
+			public void uncaughtException(Thread t, Throwable e) {
+				System.out.println("线程:" + t.getName() + " 出现了异常：");
+				e.printStackTrace();
+			}
+		});
+		t1.start();
+
+		MyThread t2 = new MyThread();
+		t2.setName("线程t2");
+		t2.start();
+	}
+}
+/*
+result:
+线程:线程t1 出现了异常：
+Exception in thread "线程t2" java.lang.NullPointerException
+	at chapter07.section05.project_1_threadCreateException.MyThread.run(MyThread.java:7)
+java.lang.NullPointerException
+	at chapter07.section05.project_1_threadCreateException.MyThread.run(MyThread.java:7)
+*/
+
+
+报出空指针异常，在Java多线程技术中，可以对多线程中的异常进行"捕捉"，使
+用的是UncaughtExceptionHandler类，从而可以对发生的异常进行有效的处理
+方法setUncaughtExceptionHandler()的作用是对指定的线程对象设置默认的异
+常处理器。在Thread类中还可以使用setDefaultUncaughtExceptionHandler()
+方法对所有线程对象设置异常处理器。
+
+
+6. 线程组内处理异常
+package chapter07.section06.project_1_threadGroup_1;
+
+public class MyThread extends Thread {
+
+	private String num;
+
+	public MyThread(ThreadGroup group, String name, String num) {
+		super(group, name);
+		this.num = num;
+	}
+
+	@Override
+	public void run() {
+		int numInt = Integer.parseInt(num);
+		while (true) {
+			System.out.println("死循环中：" + Thread.currentThread().getName());
+		}
+	}
+}
+
+
+package chapter07.section06.project_1_threadGroup_1;
+
+public class Run {
+	public static void main(String[] args) {
+		ThreadGroup group = new ThreadGroup("我的线程组");
+		MyThread[] myThread = new MyThread[10];
+		for (int i = 0; i < myThread.length; i++) {
+			myThread[i] = new MyThread(group, "线程" + (i + 1), "1");
+			myThread[i].start();
+		}
+		MyThread newT = new MyThread(group, "报错线程", "a");
+		newT.start();
+	}
+}
+从运行结果来看，在默认的情况下，线程组中的一个线程出现异常不会影响其他
+线程的运行
+
+
+
+如果想实现线程组内一个线程出现异常后全部线程都停止运行该如何实现?
+
+package chapter07.section06.project_2_threadGroup_2;
+
+public class MyThread extends Thread {
+
+	private String num;
+
+	public MyThread(ThreadGroup group, String name, String num) {
+		super(group, name);
+		this.num = num;
+	}
+
+	@Override
+	public void run() {
+		int numInt = Integer.parseInt(num);
+		while (this.isInterrupted() == false) {
+			System.out.println("死循环中：" + Thread.currentThread().getName());
+		}
+	}
+}
+
+
+package chapter07.section06.project_2_threadGroup_2;
+
+public class MyThreadGroup extends ThreadGroup {
+
+	public MyThreadGroup(String name) {
+		super(name);
+	}
+
+	@Override
+	public void uncaughtException(Thread t, Throwable e) {
+		super.uncaughtException(t, e);
+		this.interrupt();
+	}
+}
+
+
+package chapter07.section06.project_2_threadGroup_2;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThreadGroup group = new MyThreadGroup("我的线程组");
+		MyThread[] myThread = new MyThread[10];
+		for (int i = 0; i < myThread.length; i++) {
+			myThread[i] = new MyThread(group, "线程" + (i + 1), "1");
+			myThread[i].start();
+		}
+		MyThread newT = new MyThread(group, "报错线程", "a");
+		newT.start();
+	}
+}
+使用自定义java.lang.ThreadGroup线程组，并且重写uncaughtException方
+法处理组内线程中断行为时，每个线程对象中的run()方法内部不要有异常catc
+语句，如果有catch语句，则public void uncaughtException(Thread t, 
+Throwable e)方法不执行
+
+
+7. 线程异常处理的传递
+具体看代码
+结论:
+	方法setUncaughtExceptionHandler()是给指定线程对象设置异常处理器，
+seDefaultUncaughtExceptionHandler()是给所有线程对象设置异常处理器，以及
+线程组覆盖ThreadGroup的uncaughtException(Thread t, Throwable e)方法。
+异常的传递由前面特殊传递到后面普遍
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

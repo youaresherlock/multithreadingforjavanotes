@@ -1,0 +1,1373 @@
+第六章
+
+单例模式与多线程
+
+前言:
+我之前已经开设了23个设计模式这个专栏，介绍了很多的Java设计模式，其中一些模式对于绝
+大多数编程语言设计思想都是类似的，需要了解单例模式的可以去看看。
+我们在实际开发中经常用到单例模式，但是同时也配合多线程来使用，我们需要考虑的是
+如何使单例模式遇到多线程是安全的、正确的。
+
+
+单例模式:
+1. 单例类只能有一个实例
+2. 单例类必须自己创建自己的唯一实例
+3. 单例类必须给其它对象提供这一实例
+
+
+单例模式的应用:
+单例模式的应用非常广泛，例如在计算机系统中线程池、缓存、日志对象、对话框、打印机、显
+卡的驱动程序对象常被设计成单例。这些应用都或多或少具有资源管理器的功能。
+单例对象通常作为程序中的存放配置信息的载体，因为它能保证其它对象读到一致的信息。例
+如在某个服务器程序中，该服务器的配置信息可能放在数据库或文件中(json,xml,txt比较
+常见),这些配置数据由某个单例对象统一获取，服务进程中的其他对象如果要获取这些配置
+信息，只需访问该单例对象即可。
+
+
+在这里简单来说一下Java中类的加载:
+所有的类都是在对其第一次使用时，动态加载到JVM中的（懒加载）。当程序创建第一个对类的
+静态成员的引用时，就会加载这个类。使用new创建类对象的时候也会被当作对类的静态成员的
+引用。因此java程序程序在它开始运行之前并非被完全加载，其各个类都是在必需时才加载的。
+这一点与许多传统语言都不同。动态加载使能的行为，在诸如C++这样的静态加载语言中是很难
+或者根本不可能复制的。
+
+  在类加载阶段，类加载器首先检查这个类的Class对象是否已经被加载。如果尚未加载，默认
+的类加载器就会根据类的全限定名查找.class文件。在这个类的字节码被加载时，它们会接受验
+证，以确保其没有被破坏，并且不包含不良java代码。一旦某个类的Class对象被载入内存，我
+们就可以它来创建这个类的所有对象。
+
+
+1. 立即加载/"饿汉模式"
+立即加载:
+	立即加载就是使用类的时候已经将对象创建完毕，常见的实现办法就是直接new实例化。
+而立即加载从中文的语境来看，有"着急"、"急迫"的含义，所以也称为"饿汉模式"
+立即加载/"饿汉模式"是在调用方法前，实例已经被创建了.
+
+
+举例:
+package chapter06.section01.project_1_singleton_0;
+
+public class MyObject {
+	
+	//立即加载方式==饿汉模式
+	private static MyObject myObject = new MyObject();
+	
+	private MyObject() {}
+	
+	public static MyObject getInstance() {
+		//此代码版本为立即加载
+		//此版本代码的缺点是不能有其他实例变量
+		//因为getInstance()方法没有同步
+		//所以有可能出现非线程完全问题
+		return myObject;
+	}
+}
+
+
+package chapter06.section01.project_1_singleton_0;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		System.out.println(MyObject.getInstance().hashCode());
+	}
+}
+
+
+package chapter06.section01.project_1_singleton_0;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+/*
+result:
+1122949189
+1122949189
+1122949189
+*/
+打印的hashCode是同一个值，说明对象是同一个，也就实现了立即加载型单例设计模式
+
+
+
+2. 延迟加载/"懒汉模式"
+延迟加载:
+	延迟加载就是在调用get()方法时实例才被创建，常见的实现办法就是在get()方法中进行
+new实例化。而延迟加载从中文的语境来看，是"缓慢"、"不急迫"的含义，所以也称为"懒汉模式"
+
+
+(1) 延迟加载/"饿汉模式"解析
+是在调用方法时实例才被创建
+
+package chapter06.section02.project_1_singleton_1;
+
+public class MyObject {
+	private static MyObject myObject;
+	
+	//注意此处为private
+	private MyObject() {}
+	
+	public static MyObject getInstance() {
+		//延迟加载
+		if(myObject != null) {
+		} else {
+			//模拟在创建对象之前做一些准备性工作
+//			Thread.sleep(3000); //要捕获异常
+			myObject = new MyObject();
+		}
+		
+		return myObject;
+	}
+}
+
+
+package chapter06.section02.project_1_singleton_1;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		System.out.println(MyObject.getInstance().hashCode());
+	}
+}
+
+
+package chapter06.section02.project_1_singleton_1;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+/*
+单线程情况下result:
+781844118
+多线程情况下加上注释result:
+1456203498
+1455173736
+2038812851
+*/
+只取得一个对象的实例，但如果是在多线程的环境中，就会出现取出多个实例的情况，与单
+例模式的初衷是背离的
+
+
+
+(2) 延迟加载/"懒汉模式"的缺点
+如果是在多线程的环境中，前面"延迟加载"示例代码完全就是错误的，根本不能实现保持单
+例的状态
+举例:
+上面代码去掉注释，打印了3种hashCode,说明创建了3个对象，并不是单例的。
+
+
+(3) 延迟加载/"懒汉模式"的解决方案
+
+1) 声明synchronized关键字
+既然多个线程可以同时进入getInstance()方法，那么只需要对getInstance()方法声明
+synchronized关键字即可。
+
+
+举例:
+package chapter06.section02.project_3_singleton_2_1;
+
+public class MyObject {
+	private static MyObject myObject;
+	
+	//注意此处为private
+	private MyObject() {}
+	
+	//设置同步方法效率太低了
+	//整个方法被上锁， static静态方法获得的是MyObject的class对象锁，只有一个
+	synchronized public static MyObject getInstance() {
+		try {
+			if(myObject != null) {
+			} else {
+				//模拟在创建对象之前做一些准备性的工作
+				Thread.sleep(3000);
+				myObject = new MyObject();
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+		
+		return myObject;
+	}
+}
+
+
+package chapter06.section02.project_3_singleton_2_1;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		System.out.println(MyObject.getInstance().hashCode());
+	}
+}
+
+
+package chapter06.section02.project_3_singleton_2_1;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+/*
+reslt:
+1566790350
+1566790350
+1566790350
+*/
+此方法加入同步synchronized关键字得到相同实例的对象，但此种方法的运行效率非常低
+下，是同步运行的，下一个线程想要获取的对象，必须等上一个线程释放锁之后，才可以
+继续执行。
+
+
+2) 尝试同步代码块
+同步方法是对方法的整体进行持锁，这对运行效率来讲是不利的，改为同步代码块
+
+package chapter06.section02.project_4_singleton_2_2;
+
+public class MyObject {
+	private static MyObject myObject;
+	
+	//注意此处为private
+	private MyObject() {}
+	
+	 public static MyObject getInstance() {
+		try {
+			//此种写法等同于:
+			//synchronized public static MyObject getInstance()
+			//的写法，效率一样很低，全部代码被上锁
+			synchronized(MyObject.class) {
+				if(myObject != null) {
+				} else {
+					//模拟在创建对象之前做一些准备性的工作
+					Thread.sleep(3000);
+					myObject = new MyObject();
+				}
+			}
+		} catch (InterruptedException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		}
+		
+		return myObject;
+	}
+}
+
+
+package chapter06.section02.project_4_singleton_2_2;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		System.out.println(MyObject.getInstance().hashCode());
+	}
+}
+
+
+package chapter06.section02.project_4_singleton_2_2;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+		
+		// 此版本代码虽然是正确的
+		// 但public static MyObject getInstance()方法
+		// 中的全部代码都是同步的了，这样做有损效率
+	}
+}
+/*
+reslt:
+1122949189
+1122949189
+1122949189
+*/
+
+
+3) 针对某些重要的代码进行单独的同步
+同步代码块可以针对某些重要的代码进行单独的同步，而其他的代码则不需要同步。这样在
+运行时，效率完全可以得到大幅度提升。
+
+package chapter06.section02.project_5_singleton_3;
+
+public class MyObject {
+	private static MyObject myObject;
+	
+	//注意此处为private
+	private MyObject() {}
+	
+	public static MyObject getInstance() {
+		try {
+			if (myObject != null) {
+			} else {
+				// 模拟在创建对象之前做一些准备性的工作
+				Thread.sleep(3000);
+				// 使用synchronized (MyObject.class)
+				// 虽然部分代码被上锁
+				// 但还是有非线程安全问题
+				synchronized (MyObject.class) {
+					myObject = new MyObject();
+				}
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		return myObject;
+	}
+}
+
+
+package chapter06.section02.project_5_singleton_3;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		System.out.println(MyObject.getInstance().hashCode());
+	}
+}
+
+
+package chapter06.section02.project_5_singleton_3;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+		
+		// 此版本代码虽然是正确的
+		// 但public static MyObject getInstance()方法
+		// 中的全部代码都是同步的了，这样做有损效率
+	}
+}
+/*
+reslt:
+1122949189
+1477182363
+1566790350
+*/
+虽然提升了效率，但问题还是没有解决(显然的，写博客好费时间)
+
+
+
+4) 使用DCL双检查锁机制(Double-checked Lock, DCL)
+DCL双检查机制:
+	就是在同步代码块调用之前检查一遍，再在同步代码块内部再检查一遍，双重保险
+
+举例:
+package chapter06.section02.project_6_singleton_5;
+
+public class MyObject {
+	private static MyObject myObject;
+	
+	//注意此处为private
+	private MyObject() {}
+	
+	//使用双检测机制来解决问题
+	//即保证了不需要同步代码块的异步
+	//又保证了单例的效果
+	public static MyObject getInstance() {
+		try {
+			if (myObject != null) {
+			} else {
+				// 模拟在创建对象之前做一些准备性的工作
+				Thread.sleep(3000);
+				synchronized(MyObject.class) {
+					if(myObject == null) {
+						myObject = new MyObject();
+					}
+				}
+			}
+		} catch (InterruptedException e) {
+			e.printStackTrace();
+		}
+		return myObject;
+	}
+	
+	// 此版本的代码称为：
+	// 双重检查Double-Check Locking
+}
+
+
+package chapter06.section02.project_6_singleton_5;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		System.out.println(MyObject.getInstance().hashCode());
+	}
+}
+
+
+package chapter06.section02.project_6_singleton_5;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+/*
+reslt:
+1403299602
+1403299602
+1403299602
+*/
+DCL是大多数多线程结合单例模式使用的解决方案
+
+
+
+
+3. 使用静态内置类实现单例模式
+
+DCL可以解决多线程单例模式的非线程安全问题。当然，使用其他的办法也能达到同样的效
+果。
+
+举例:
+package chapter06.section03.project_1_singleton_7;
+
+public class MyObject {
+	
+	//内部类方式
+	private static class MyObjectHandler{
+		private static MyObject myObject = new MyObject();
+	}
+	
+	private MyObject() {}
+	
+	public static MyObject getInstance() {
+		return MyObjectHandler.myObject;
+	}
+}
+
+
+package chapter06.section03.project_1_singleton_7;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+/*
+reslt:
+1391749355
+1391749355
+1391749355
+*/
+
+
+4.序列化与反序列化的单例模式实现
+
+Java提供了一种对象序列化的机制，该机制中，一个对象可以被表示为一个字节序列，
+该字节序列包括该对象的数据、有关对象的类型的信息和存储在对象中数据的类型。
+当一个类实现了Serializable接口，我们就可以把序列化对象写入文件之后，从文件
+中读取出来。从内存读出而组装的对象破坏了单例的规则，单例是要求一个JVM中只有
+一个类对象的，而现在通过反序列化，一个新的对象克隆了出来。
+
+静态内之类可以达到线程安全问题，但如果遇到序列化对象时，使用默认的方式运行得
+到的结果还是多例的。
+
+举例:
+package chapter06.section04.project_1_singleton_7_1;
+
+import java.io.ObjectStreamException;
+import java.io.Serializable;
+
+public class MyObject implements Serializable{
+	
+	private static final long serialVersionUID = 888L;
+	
+	//内部类方式
+	private static class MyObjectHandler{
+		private static final MyObject myObject = new MyObject();
+	}
+	
+	private MyObject() {}
+	
+	public static MyObject getInstance() {
+		return MyObjectHandler.myObject;
+	}
+	
+	protected Object readResolve() throws ObjectStreamException{
+		System.out.println("调用了readResolve方法!");
+		return MyObjectHandler.myObject;
+	}
+	
+}
+
+
+package chapter06.section04.project_1_singleton_7_1;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileNotFoundException;
+import java.io.FileOutputStream;
+import java.io.IOException;
+import java.io.ObjectInputStream;
+import java.io.ObjectOutputStream;
+
+public class SaveAndRead {
+	public static void main(String[] args) {
+		try {
+			MyObject myObject = MyObject.getInstance();
+			FileOutputStream fosRef = new FileOutputStream(new File(
+					"myObjectFile.txt"));
+			ObjectOutputStream oosRef = new ObjectOutputStream(fosRef);
+			oosRef.writeObject(myObject);
+			oosRef.close();
+			fosRef.close();
+			System.out.println(myObject.hashCode());
+		} catch (FileNotFoundException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} catch(IOException e) {
+			e.printStackTrace();
+		}
+		
+		try {
+			FileInputStream fisRef = new FileInputStream(new File(
+					"myObjectFile.txt"));
+			ObjectInputStream oisRef = new ObjectInputStream(fisRef);
+			MyObject myObject = (MyObject)oisRef.readObject();			
+			oisRef.close();
+			fisRef.close();
+			System.out.println(myObject.hashCode());
+		} catch (FileNotFoundException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} catch(IOException e) {
+			e.printStackTrace();
+		} catch(ClassNotFoundException e) {
+			e.printStackTrace();
+		}
+	}
+}
+/*
+result:
+1612799726
+787387795
+去掉注释:
+1612799726
+调用了readResolve方法!
+1612799726
+*/
+可以看到我们加入了readResolve方法之后，就保证了单例
+
+
+
+5. 使用static代码块实现单例模式
+
+静态代码块中的代码在使用类的时候就已经执行了，所以可以应用静态代码块这个特性
+来实现单例设计模式
+
+package chapter06.section05.project_1_singleton_8;
+
+public class MyObject {
+	
+	private static MyObject instance = null;
+	
+	private MyObject() {}
+	
+	static {
+		instance = new MyObject();
+	}
+	
+	public static MyObject getInstance() {
+		return instance;
+	}
+}
+
+
+package chapter06.section05.project_1_singleton_8;
+
+public class MyThread extends Thread{
+	
+	@Override
+	public void run() {
+		System.out.println(MyObject.getInstance().hashCode());
+	}
+}
+
+
+package chapter06.section05.project_1_singleton_8;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+/*
+reslt:
+1122949189
+1122949189
+1122949189
+*/
+
+
+6. 使用enum枚举数据类型实现单例模式
+
+枚举enum和静态代码块的特性相似，在使用枚举类时，构造方法会被自动调用，也可
+以应用其这个特性实现单例设计模式
+
+
+枚举类简介:
+	实质上定义出来的类型继承自Java.lang.Enum类型(因此不能继承其他的类),在
+使用关键字enum创建枚举类型并编译后，编译器会为我们生成一个相关的类，这个类
+继承了Java API中的java.lang.Enum类，也就是说通过关键字enum创建枚举类型在
+编译后事实上也是一个类类型而且该类继承自java.lang.Enum类
+枚举的成员其实就是我们定义的枚举类型的一个实例Instance,被预设为public static 
+final的成员常量。所以无法改变他们，他们是static成员，可以直接通过类名使用。
+	枚举类型是单例模式的，构造函数是private,防止用户生成实例，破坏唯一性
+
+举例:
+package chapter06.section06.project_1_singleton_9;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public enum MyObject {
+	connectionFactory;
+	
+	private Connection connection;
+	
+	private MyObject() {
+		try {
+			System.out.println("调用了MyObject的构造");
+			String url = "jdbc:sqlserver://localhost:1079;databaseName=ghydb";
+			String username = "sa";
+			String password = "";
+			String driverName = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+			Class.forName(driverName);
+			connection = DriverManager.getConnection(url,  username, password);
+		} catch (ClassNotFoundException e) {
+			// TODO: handle exception
+			e.printStackTrace();
+		} catch(SQLException e) {
+			e.printStackTrace();
+		}
+	}
+	
+	public Connection getConnection() {
+		return connection;
+	}
+}
+
+
+package chapter06.section06.project_1_singleton_9;
+
+public class MyThread extends Thread {
+
+	@Override
+	public void run() {
+		for (int i = 0; i < 5; i++) {
+			System.out.println(MyObject.connectionFactory.getConnection()
+					.hashCode());
+		}
+	}
+}
+
+
+package chapter06.section06.project_1_singleton_9;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+
+
+
+7. 完善使用enum枚举实现单例模式
+前面一节对枚举类进行暴露，违反了"职责单一原则"，完善
+
+package chapter06.section07.project_1_singleton_10;
+
+import java.sql.Connection;
+import java.sql.DriverManager;
+import java.sql.SQLException;
+
+public class MyObject {
+	
+	public enum MyEnumSingleton {
+		connectionFactory;
+
+		private Connection connection;
+
+		private MyEnumSingleton() {
+			try {
+				System.out.println("创建MyObject对象");
+				String url = "jdbc:sqlserver://localhost:1079;databaseName=y2";
+				String username = "sa";
+				String password = "";
+				String driverName = "com.microsoft.sqlserver.jdbc.SQLServerDriver";
+				Class.forName(driverName);
+				connection = DriverManager.getConnection(url, username,
+						password);
+			} catch (ClassNotFoundException e) {
+				e.printStackTrace();
+			} catch (SQLException e) {
+				e.printStackTrace();
+			}
+		}
+
+		public Connection getConnection() {
+			return connection;
+		}
+	}
+
+	public static Connection getConnection() {
+		return MyEnumSingleton.connectionFactory.getConnection();
+	}
+}
+
+
+package chapter06.section07.project_1_singleton_10;
+
+public class MyThread extends Thread {
+
+	@Override
+	public void run() {
+		for (int i = 0; i < 5; i++) {
+			System.out.println(MyObject.getConnection()
+					.hashCode());
+		}
+	}
+}
+
+
+package chapter06.section07.project_1_singleton_10;
+
+public class Run {
+	public static void main(String[] args) {
+		MyThread t1 = new MyThread();
+		MyThread t2 = new MyThread();
+		MyThread t3 = new MyThread();
+		
+		t1.start();
+		t2.start();
+		t3.start();
+	}
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
